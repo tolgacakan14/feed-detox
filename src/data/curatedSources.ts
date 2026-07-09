@@ -26,7 +26,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["galatasaray", "futbol", "football"],
-    reason: "Fan community with match threads — joining keeps the topic active in your history.",
+    whyItMatters: "Fan community with match threads — joining keeps the topic active in your history.",
   },
   {
     title: "Galatasaray Official Site",
@@ -36,7 +36,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["galatasaray", "futbol", "football"],
-    reason: "Official club news — the cleanest source, zero rumor noise.",
+    whyItMatters: "Official club news — the cleanest source, zero rumor noise.",
   },
   {
     title: "r/soccer",
@@ -46,7 +46,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["football", "futbol", "soccer", "premier league", "la liga", "real betis", "betis", "tactics", "galatasaray"],
-    reason: "The biggest football community — upvoted analysis beats feed rumors.",
+    whyItMatters: "The biggest football community — upvoted analysis beats feed rumors.",
   },
   {
     title: "Transfermarkt",
@@ -56,7 +56,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["football", "futbol", "soccer", "transfer", "la liga", "real betis", "betis", "galatasaray"],
-    reason: "Real squad/transfer data — check facts here instead of rumor accounts.",
+    whyItMatters: "Real squad/transfer data — check facts here instead of rumor accounts.",
   },
   {
     title: "r/nba",
@@ -66,7 +66,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["nba", "basketball"],
-    reason: "Every game gets a discussion thread — high signal, community-moderated.",
+    whyItMatters: "Every game gets a discussion thread — high signal, community-moderated.",
   },
   {
     title: "r/formula1",
@@ -76,7 +76,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["formula", "f1", "formula 1"],
-    reason: "Race threads and technical analysis from a huge moderated community.",
+    whyItMatters: "Race threads and technical analysis from a huge moderated community.",
   },
   {
     title: "Formula1.com",
@@ -86,7 +86,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["formula", "f1", "formula 1"],
-    reason: "Official F1 news and highlights hub.",
+    whyItMatters: "Official F1 news and highlights hub.",
   },
   // Tech / AI / startups
   {
@@ -97,7 +97,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["ai", "tech", "startup", "programming", "software", "web3", "girişim"],
-    reason: "Reading real builder discussions recalibrates what tech content you engage with.",
+    whyItMatters: "Reading real builder discussions recalibrates what tech content you engage with.",
   },
   {
     title: "Product Hunt",
@@ -107,7 +107,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["ai", "ai tools", "startup", "saas", "tech", "yapay zeka"],
-    reason: "Daily launches of real tools — follow topics there instead of hype threads.",
+    whyItMatters: "Daily launches of real tools — follow topics there instead of hype threads.",
   },
   {
     title: "GitHub Trending",
@@ -117,7 +117,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["ai", "programming", "software", "open source", "developer", "tech"],
-    reason: "What developers actually star this week — reality check for AI hype.",
+    whyItMatters: "What developers actually star this week — reality check for AI hype.",
   },
   {
     title: "r/MachineLearning",
@@ -127,7 +127,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["ai", "machine learning", "yapay zeka", "data science"],
-    reason: "Research-grade AI discussion — trains you to spot slop instantly.",
+    whyItMatters: "Research-grade AI discussion — trains you to spot slop instantly.",
   },
   {
     title: "Hugging Face",
@@ -137,7 +137,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["ai", "machine learning", "llm", "yapay zeka"],
-    reason: "Where real AI models live — browse trending models, not screenshots of them.",
+    whyItMatters: "Where real AI models live — browse trending models, not screenshots of them.",
   },
   {
     title: "r/startups",
@@ -147,7 +147,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["startup", "girişim", "founder", "saas"],
-    reason: "Founders sharing real numbers and failures, not highlight reels.",
+    whyItMatters: "Founders sharing real numbers and failures, not highlight reels.",
   },
   {
     title: "r/CryptoCurrency",
@@ -157,7 +157,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["web3", "crypto", "blockchain"],
-    reason: "Big moderated crypto community — skeptical threads included, unlike your feed.",
+    whyItMatters: "Big moderated crypto community — skeptical threads included, unlike your feed.",
   },
   // Music
   {
@@ -168,7 +168,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["music", "müzik", "indie", "underground", "deep house", "techno"],
-    reason: "Buying/browsing here surfaces artists the algorithm hasn't flattened yet.",
+    whyItMatters: "Buying/browsing here surfaces artists the algorithm hasn't flattened yet.",
   },
   {
     title: "Pitchfork",
@@ -178,7 +178,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["music", "müzik", "indie", "album"],
-    reason: "Long-form reviews feed you vocabulary to search better music.",
+    whyItMatters: "Long-form reviews feed you vocabulary to search better music.",
   },
   {
     title: "r/electronicmusic",
@@ -188,7 +188,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["music", "müzik", "house", "deep house", "techno", "edm", "dj"],
-    reason: "Human-curated electronic picks — better input than autoplay.",
+    whyItMatters: "Human-curated electronic picks — better input than autoplay.",
   },
   // Fashion
   {
@@ -199,7 +199,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["streetwear", "fashion", "moda", "sneaker", "sokak modası", "japanese streetwear"],
-    reason: "Real fits with honest feedback — sharpens what you save on Instagram.",
+    whyItMatters: "Real fits with honest feedback — sharpens what you save on Instagram.",
   },
   {
     title: "r/malefashionadvice",
@@ -209,7 +209,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["fashion", "moda", "style", "outfit", "wardrobe"],
-    reason: "Guides and lookbooks that outlast trend-bait.",
+    whyItMatters: "Guides and lookbooks that outlast trend-bait.",
   },
   {
     title: "Hypebeast",
@@ -219,7 +219,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["streetwear", "fashion", "sneaker", "moda"],
-    reason: "Release news straight from the source instead of repost pages.",
+    whyItMatters: "Release news straight from the source instead of repost pages.",
   },
   {
     title: "r/SkincareAddiction",
@@ -229,7 +229,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["skincare", "beauty", "skincare science"],
-    reason: "Evidence-first skincare — the antidote to miracle-product feeds.",
+    whyItMatters: "Evidence-first skincare — the antidote to miracle-product feeds.",
   },
   // Food
   {
@@ -240,7 +240,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["cooking", "recipe", "food", "yemek", "healthy cooking", "tarif"],
-    reason: "Tested recipes with the science — searching these terms upgrades your food feed.",
+    whyItMatters: "Tested recipes with the science — searching these terms upgrades your food feed.",
   },
   {
     title: "r/Cooking",
@@ -250,7 +250,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["cooking", "recipe", "food", "yemek", "meal prep"],
-    reason: "Practical technique threads instead of 15-second recipe bait.",
+    whyItMatters: "Practical technique threads instead of 15-second recipe bait.",
   },
   // Finance
   {
@@ -261,7 +261,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["finance", "personal finance", "money", "budget", "investing", "finans"],
-    reason: "Wiki + flowcharts beat finfluencer content every time.",
+    whyItMatters: "Wiki + flowcharts beat finfluencer content every time.",
   },
   // Film / cinema
   {
@@ -272,7 +272,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["cinema", "film", "movie", "sinema", "cinema analysis"],
-    reason: "Logging films builds your own taste graph — better than trailer spam.",
+    whyItMatters: "Logging films builds your own taste graph — better than trailer spam.",
   },
   {
     title: "r/TrueFilm",
@@ -282,7 +282,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["cinema", "film", "movie", "sinema", "video essay", "cinema analysis"],
-    reason: "Long-form film discussion that trains you to seek analysis, not discourse.",
+    whyItMatters: "Long-form film discussion that trains you to seek analysis, not discourse.",
   },
   // Gaming
   {
@@ -293,7 +293,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["indie games", "gaming", "game", "oyun"],
-    reason: "Devs posting real gameplay — wishlist from here, not from ads.",
+    whyItMatters: "Devs posting real gameplay — wishlist from here, not from ads.",
   },
   {
     title: "r/gamedev",
@@ -303,7 +303,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["game dev", "gamedev", "indie games", "gaming"],
-    reason: "Behind-the-scenes dev talk deepens any gaming feed.",
+    whyItMatters: "Behind-the-scenes dev talk deepens any gaming feed.",
   },
   // Photography
   {
@@ -314,7 +314,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["photography", "fotoğraf", "camera", "street photography"],
-    reason: "Critique threads teach you what to save — the strongest Explore signal.",
+    whyItMatters: "Critique threads teach you what to save — the strongest Explore signal.",
   },
   // Science / history / podcasts
   {
@@ -325,7 +325,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["history", "tarih", "history podcasts", "science", "education"],
-    reason: "Expert-only answers — recalibrates your tolerance for fake facts pages.",
+    whyItMatters: "Expert-only answers — recalibrates your tolerance for fake facts pages.",
   },
   {
     title: "arXiv",
@@ -335,7 +335,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "verified",
     tags: ["science", "research", "physics", "ai", "machine learning", "bilim"],
-    reason: "Primary sources — one real paper beats ten summary threads.",
+    whyItMatters: "Primary sources — one real paper beats ten summary threads.",
   },
   // Career / productivity
   {
@@ -346,7 +346,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["productivity", "verimlilik", "focus", "habits", "study", "career", "kariyer"],
-    reason: "Systems people actually use — mute the hustle bros after joining.",
+    whyItMatters: "Systems people actually use — mute the hustle bros after joining.",
   },
   // Health
   {
@@ -357,7 +357,7 @@ export const curatedSources: CuratedSource[] = [
     source: "curated",
     confidence: "likely",
     tags: ["meditation", "mindfulness", "mental health", "wellbeing"],
-    reason: "Practice-first community, no guru selling a course.",
+    whyItMatters: "Practice-first community, no guru selling a course.",
   },
 ];
 

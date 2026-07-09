@@ -39,7 +39,7 @@ export type DiscoveryType =
 /** Curated demo signal metadata (structured now so real-time ranking can
  * plug in later). These labels are sample/demo values, not live engagement. */
 export type Popularity = "global" | "niche" | "emerging";
-export type Freshness = "evergreen" | "new" | "trending";
+export type Freshness = "evergreen" | "active_recently" | "trending";
 export type EngagementLabel =
   | "High engagement"
   | "Popular"
@@ -48,11 +48,33 @@ export type EngagementLabel =
   | "Niche quality";
 export type ItemLang = "en" | "tr" | "mixed";
 
+/** Verified Feed Pack quality signals — inferred conservatively from source
+ * type/platform/confidence (see lib/discovery inferBestAction/inferNoiseRisk/
+ * inferNicheLevel), never invented per-item metrics like follower counts. */
+export type NoiseRisk = "Low" | "Medium" | "High";
+export type NicheLevel = "Mainstream" | "Balanced" | "Niche";
+export type BestActionLabel =
+  | "Follow"
+  | "Watch"
+  | "Save"
+  | "Join"
+  | "Read"
+  | "Subscribe"
+  | "Explore"
+  | "Mute"
+  | "Avoid";
+export interface BestAction {
+  label: BestActionLabel;
+  description: string;
+}
+
 /**
  * A single recommendation. The anti-hallucination guard rejects any result
  * whose url/source/confidence combination breaks the rules (see lib/discovery).
  * Rich fields (creatorName…isDemo) are present on curated demo signals and
- * absent on generated search fallbacks.
+ * absent on generated search fallbacks. bestAction/noiseRisk/nicheLevel are
+ * optional on raw data but always populated by finalizeFeedPackItem before a
+ * FeedPackResult is returned to the API/UI.
  */
 export interface DiscoveryResult {
   id: string;
@@ -65,9 +87,12 @@ export interface DiscoveryResult {
   /** true only for actual profiles/channels/videos/communities/websites;
    * false for discovery/search pages. */
   isDirectLink: boolean;
-  reason: string; // short "why this trains your algorithm"
+  whyItMatters: string; // short, useful explanation of the source's value
   snippet?: string;
   rawQuery?: string; // the search query behind a search_action
+  bestAction?: BestAction;
+  noiseRisk?: NoiseRisk;
+  nicheLevel?: NicheLevel;
   // ── Curated demo signal metadata (optional) ──
   creatorName?: string;
   handle?: string;

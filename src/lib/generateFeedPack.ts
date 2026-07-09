@@ -4,6 +4,7 @@ import { analyzeTopics } from "@/lib/topicIntel";
 import {
   dedupeByUrl,
   extractDirectLinks,
+  finalizeFeedPackItem,
   guardResults,
   scoreResult,
   searchAction,
@@ -149,7 +150,7 @@ function groupResults(items: DiscoveryResult[], topics: string[]) {
     else if (it.type === "community" || it.type === "newsletter") buckets.communities.push(it);
     else if (it.type === "creator" || it.type === "account" || it.type === "channel")
       buckets.creators.push(it);
-    else if (it.freshness === "trending" || it.freshness === "new") buckets.fresh.push(it);
+    else if (it.freshness === "trending" || it.freshness === "active_recently") buckets.fresh.push(it);
     else if (
       it.popularity === "niche" ||
       it.type === "website" ||
@@ -180,7 +181,7 @@ const GENERIC_DIRECT_POOL: DiscoveryResult[] = [
     category: "General", itemLanguage: "en", popularity: "global",
     freshness: "evergreen", engagementLabel: "High engagement",
     shortDescription: "Ideas worth spreading, on any topic worth learning.",
-    reason: "A reliable starting point while we don't have a curated match for your exact topic yet.",
+    whyItMatters: "A reliable starting point while we don't have a curated match for your exact topic yet.",
   },
   {
     id: "generic-hn", title: "Hacker News", url: "https://news.ycombinator.com/",
@@ -188,7 +189,7 @@ const GENERIC_DIRECT_POOL: DiscoveryResult[] = [
     isDirectLink: true, isDemo: true, category: "General", itemLanguage: "en",
     popularity: "global", freshness: "evergreen", engagementLabel: "Popular",
     shortDescription: "Broad, high-signal link aggregator across tech and beyond.",
-    reason: "Useful general discovery while your specific topic isn't in our curated set.",
+    whyItMatters: "Useful general discovery while your specific topic isn't in our curated set.",
   },
   {
     id: "generic-reddit-til", title: "r/todayilearned",
@@ -197,16 +198,16 @@ const GENERIC_DIRECT_POOL: DiscoveryResult[] = [
     isDirectLink: true, isDemo: true, category: "General", itemLanguage: "en",
     popularity: "global", freshness: "evergreen", engagementLabel: "Popular",
     shortDescription: "A large, moderated community for genuinely interesting finds.",
-    reason: "A safe direct community to join while we build out coverage for this topic.",
+    whyItMatters: "A safe direct community to join while we build out coverage for this topic.",
   },
   {
     id: "generic-producthunt", title: "Product Hunt",
     url: "https://www.producthunt.com/", platform: "web", type: "website",
     source: "curated", confidence: "verified", isDirectLink: true, isDemo: true,
     category: "General", itemLanguage: "en", popularity: "global",
-    freshness: "new", engagementLabel: "Rising",
+    freshness: "active_recently", engagementLabel: "Rising",
     shortDescription: "Daily launches across every category, not just tech.",
-    reason: "Real, browsable source while curated coverage for your topic expands.",
+    whyItMatters: "Real, browsable source while curated coverage for your topic expands.",
   },
 ];
 
@@ -264,7 +265,23 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
         ].slice(0, MAX_FALLBACK_ITEMS)
       : [];
 
+  // Grouping happens on the RAW freshness/popularity signal (undefined means
+  // "no signal, use type/popularity instead"). Verified Feed Pack quality
+  // fields (whyItMatters/bestAction/noiseRisk/nicheLevel/freshness defaults)
+  // are filled in per-bucket AFTER grouping, so a defaulted freshness value
+  // never leaks back into where an item gets placed.
   const sections = groupResults([...realPool, ...fallbacks], topics);
+
+  (Object.keys(sections) as SectionKey[]).forEach((k) => {
+    sections[k] = sections[k]
+      .map(finalizeFeedPackItem)
+      // Anti-hallucination completeness guard: a card missing a required
+      // field shouldn't reach the UI, even though finalize should always
+      // fill these — this is the last checkpoint before returning.
+      .filter(
+        (r) => r.title && r.url && r.whyItMatters && r.bestAction && r.noiseRisk && r.nicheLevel && r.freshness,
+      );
+  });
 
   const all = Object.values(sections).flat();
   const verifiedLinksCount = all.filter((r) => r.type !== "search_action").length;

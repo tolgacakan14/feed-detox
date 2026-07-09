@@ -1,4 +1,11 @@
-import type { DiscoveryResult, Platform } from "@/types";
+import type {
+  BestAction,
+  DiscoveryResult,
+  Freshness,
+  NicheLevel,
+  NoiseRisk,
+  Platform,
+} from "@/types";
 import { isStructurallyValid } from "@/lib/validateUrl";
 
 /**
@@ -72,7 +79,7 @@ export function searchAction(
     confidence: "search_action",
     isDirectLink: false,
     rawQuery: query,
-    reason: reason ?? DEFAULT_DISCOVERY_REASON,
+    whyItMatters: reason ?? DEFAULT_DISCOVERY_REASON,
   };
 }
 
@@ -180,7 +187,7 @@ export function extractDirectLinks(
         confidence: "verified" as const,
         isDirectLink: true,
         snippet: raw.snippet,
-        reason: "Found in live results — engage with it to teach your feed this is the good stuff.",
+        whyItMatters: "Found in live results — engage with it to teach your feed this is the good stuff.",
       },
     ];
   });
@@ -215,7 +222,7 @@ export function guardResults(results: DiscoveryResult[]): DiscoveryResult[] {
 
 const CONFIDENCE_SCORE = { verified: 1, likely: 0.8, search_action: 0.55 };
 const SOURCE_SCORE = { api: 1, web_search: 0.9, curated: 0.85, generated_search_url: 0.6 };
-const FRESHNESS_SCORE = { trending: 1, new: 0.75, evergreen: 0.5 };
+const FRESHNESS_SCORE = { trending: 1, active_recently: 0.75, evergreen: 0.5 };
 const ENGAGEMENT_SCORE: Record<string, number> = {
   "High engagement": 1,
   Popular: 0.85,
@@ -265,4 +272,80 @@ export function dedupeByUrl(results: DiscoveryResult[]): DiscoveryResult[] {
     seen.add(key);
     return true;
   });
+}
+
+// ── Verified Feed Pack quality signals ──────────────────────────────────────
+// Every card needs bestAction/noiseRisk/nicheLevel/freshness. Rather than
+// hand-author these on ~150 data entries, they're inferred conservatively
+// from type/platform/confidence/engagementLabel — the same "quality
+// assignment rules" a human curator would apply. Never invents numbers
+// (follower counts, engagement %) — only qualitative labels.
+
+/** What should the user actually DO with this result? */
+export function inferBestAction(item: DiscoveryResult): BestAction {
+  if (item.type === "search_action") {
+    return { label: "Explore", description: "Explore this discovery path and open the strongest profiles." };
+  }
+  if (item.type === "community") {
+    return { label: "Join", description: "Join and read a few threads before you post." };
+  }
+  if (item.type === "newsletter") {
+    return { label: "Subscribe", description: "Subscribe to keep quality input flowing even while your feed relearns." };
+  }
+  if (item.type === "video") {
+    return { label: "Watch", description: "Watch one full video to teach the platform your real interest." };
+  }
+  if (item.type === "website" || item.type === "article") {
+    return { label: "Read", description: "Read through once — bookmark it if it earns a repeat visit." };
+  }
+  // creator / account / channel
+  if (item.platform === "youtube") {
+    return { label: "Subscribe", description: "Subscribe, then watch one full video to start." };
+  }
+  return { label: "Follow", description: "Follow and interact with 2–3 useful posts." };
+}
+
+/** How likely is this source to surface ragebait, rumors, or spam? */
+export function inferNoiseRisk(item: DiscoveryResult): NoiseRisk {
+  if (item.type === "search_action") {
+    if (item.platform === "x" || item.platform === "tiktok") return "High";
+    return "Medium"; // instagram/reddit/youtube/web discovery — mixed quality
+  }
+  if (item.confidence === "verified") return "Low";
+  if (item.type === "newsletter" || item.type === "article") return "Low";
+  if (item.type === "community") return "Medium";
+  if (item.engagementLabel === "Editor pick" || item.engagementLabel === "High engagement") return "Low";
+  return "Medium";
+}
+
+/** How obvious/mainstream vs. specialist/enthusiast is this source? */
+export function inferNicheLevel(item: DiscoveryResult): NicheLevel {
+  if (item.type === "search_action" || item.type === "community") return "Balanced";
+  if (item.type === "newsletter" || item.type === "article") return "Niche";
+  if (item.popularity === "niche") return "Niche";
+  if (item.popularity === "emerging") return "Balanced";
+  if (item.popularity === "global") return item.confidence === "verified" ? "Mainstream" : "Balanced";
+  return "Balanced";
+}
+
+/** Discovery/search paths default to "trending" (time-sensitive by nature);
+ * everything else defaults to "active_recently" if no freshness was set. */
+function inferFreshness(item: DiscoveryResult): Freshness {
+  if (item.freshness) return item.freshness;
+  return item.type === "search_action" ? "trending" : "active_recently";
+}
+
+/**
+ * Fills in the Verified Feed Pack quality fields on every item right before
+ * it's returned to the API/UI. Idempotent — never overwrites a value a
+ * producer already set, only fills gaps.
+ */
+export function finalizeFeedPackItem(item: DiscoveryResult): DiscoveryResult {
+  return {
+    ...item,
+    bestAction: item.bestAction ?? inferBestAction(item),
+    noiseRisk: item.noiseRisk ?? inferNoiseRisk(item),
+    nicheLevel: item.nicheLevel ?? inferNicheLevel(item),
+    freshness: inferFreshness(item),
+  };
 }

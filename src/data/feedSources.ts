@@ -116,7 +116,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "article", title: "The Coaches' Voice",
     url: "https://www.coachesvoice.com", category: "Football analysis", language: "en",
-    popularity: "niche", freshness: "new", engagement: "Editor pick",
+    popularity: "niche", freshness: "active_recently", engagement: "Editor pick",
     tags: ["football", "futbol", "soccer", "tactics", "analysis", "galatasaray"],
     desc: "Coaches and players explain the game in their own words.",
     reason: "Long-form tactical reads teach your feed you want depth, not clips.",
@@ -152,7 +152,7 @@ const DEMO: Demo[] = [
     platform: "web", type: "website", title: "Product Hunt — AI",
     url: "https://www.producthunt.com/categories/artificial-intelligence",
     category: "AI tools", language: "en",
-    popularity: "global", freshness: "new", engagement: "Rising",
+    popularity: "global", freshness: "active_recently", engagement: "Rising",
     tags: ["ai", "ai tools", "yapay zeka", "startup", "saas"],
     desc: "Daily launches of real AI tools you can actually try.",
     reason: "Following launches replaces thread hype with things that ship.",
@@ -160,7 +160,7 @@ const DEMO: Demo[] = [
   {
     platform: "newsletter", type: "newsletter", title: "Ben's Bites",
     url: "https://bensbites.com", category: "AI tools", language: "en",
-    popularity: "niche", freshness: "new", engagement: "Editor pick",
+    popularity: "niche", freshness: "active_recently", engagement: "Editor pick",
     tags: ["ai", "ai tools", "yapay zeka", "newsletter"],
     desc: "A daily AI newsletter that keeps the signal flowing off-feed.",
     reason: "Newsletters keep quality input coming while your feed relearns.",
@@ -187,7 +187,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "website", title: "Bandcamp",
     url: "https://bandcamp.com", category: "Music discovery", language: "en",
-    popularity: "niche", freshness: "new", engagement: "Niche quality",
+    popularity: "niche", freshness: "active_recently", engagement: "Niche quality",
     tags: ["music", "müzik", "indie", "underground", "deep house", "discovery"],
     desc: "Browsing here surfaces artists the algorithm hasn't flattened yet.",
     reason: "Buying/streaming from here trains recommendations off the charts.",
@@ -234,7 +234,7 @@ const DEMO: Demo[] = [
   {
     platform: "reddit", type: "community", title: "r/UpliftingNews",
     url: "https://www.reddit.com/r/UpliftingNews", category: "No-politics clean feed", language: "en",
-    popularity: "global", freshness: "new", engagement: "Rising",
+    popularity: "global", freshness: "active_recently", engagement: "Rising",
     tags: ["no politics", "siyasetsiz", "calm", "good news", "clean feed"],
     desc: "Verified good news, strictly moderated for tone.",
     reason: "Positive engagement flips your feed's tone within a week.",
@@ -253,7 +253,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "website", title: "Webrazzi",
     url: "https://webrazzi.com", category: "Turkish content", language: "tr",
-    popularity: "niche", freshness: "new", engagement: "Editor pick",
+    popularity: "niche", freshness: "active_recently", engagement: "Editor pick",
     tags: ["türkçe", "turkish", "tech", "startup", "girişim"],
     desc: "Turkey's leading tech and startup source.",
     reason: "Reading local tech sources rebalances your feed toward real signal.",
@@ -295,7 +295,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "website", title: "Webtekno",
     url: "https://www.webtekno.com", category: "Turkish content", language: "tr",
-    popularity: "global", freshness: "new", engagement: "Popular",
+    popularity: "global", freshness: "active_recently", engagement: "Popular",
     tags: ["türkçe", "turkish", "tech", "culture"],
     desc: "One of Turkey's biggest tech and culture sites.",
     reason: "A real Turkish publication over random forwarded content.",
@@ -348,7 +348,7 @@ const DEMO: Demo[] = [
   {
     platform: "newsletter", type: "newsletter", title: "Every",
     url: "https://every.to", category: "English content", language: "en",
-    popularity: "niche", freshness: "new", engagement: "Editor pick",
+    popularity: "niche", freshness: "active_recently", engagement: "Editor pick",
     tags: ["english content", "tech", "writing"],
     desc: "A bundle of quality newsletters on tech, work and creativity.",
     reason: "Subscribing keeps sharp writing in your loop, off the feed entirely.",
@@ -391,7 +391,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "website", title: "The Muse",
     url: "https://www.themuse.com/advice", category: "Career", language: "en",
-    popularity: "global", freshness: "new", engagement: "Popular",
+    popularity: "global", freshness: "active_recently", engagement: "Popular",
     tags: ["career", "kariyer", "job", "advice"],
     desc: "Practical job search and career-growth articles.",
     reason: "A real career resource site beats recycled LinkedIn hustle posts.",
@@ -527,7 +527,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "website", title: "Colossal",
     url: "https://www.thisiscolossal.com", category: "No-politics clean feed", language: "en",
-    popularity: "niche", freshness: "new", engagement: "Editor pick",
+    popularity: "niche", freshness: "active_recently", engagement: "Editor pick",
     tags: ["no politics", "siyasetsiz", "calm", "art", "clean feed"],
     desc: "Art, design and visual culture — no outrage angle, ever.",
     reason: "Aesthetic, calm content trains your feed away from rage bait.",
@@ -552,7 +552,7 @@ const DEMO: Demo[] = [
   {
     platform: "web", type: "website", title: "My Modern Met",
     url: "https://mymodernmet.com", category: "No-politics clean feed", language: "en",
-    popularity: "global", freshness: "new", engagement: "Rising",
+    popularity: "global", freshness: "active_recently", engagement: "Rising",
     tags: ["no politics", "siyasetsiz", "calm", "art", "good news", "clean feed"],
     desc: "Uplifting art, design and culture stories.",
     reason: "Positive culture stories crowd out doom-scroll headlines.",
@@ -697,7 +697,7 @@ export function matchFeedSources(topics: string[]): DiscoveryResult[] {
     confidence: d.official ? ("verified" as const) : ("likely" as const),
     isDirectLink: true,
     isDemo: true,
-    reason: d.reason,
+    whyItMatters: d.reason,
     creatorName: d.creatorName,
     handle: d.handle,
     category: d.category,

@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -16,14 +15,13 @@ import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
 import { PLATFORM_SHORT_LABELS } from "@/lib/platform";
 import { Badge } from "@/components/ui/badge";
 import {
+  FIELD_LABEL,
   FRESHNESS_BADGE,
-  LANG_BADGE,
-  POPULARITY_BADGE,
   SECTION_ORDER,
   TYPE_BADGE,
   translations,
 } from "@/lib/i18n";
-import type { DiscoveryResult, FeedPackResult, SectionKey } from "@/types";
+import type { DiscoveryResult, FeedPackResult, NoiseRisk, SectionKey } from "@/types";
 
 const SECTION_ICON: Record<SectionKey, LucideIcon> = {
   creators: UserPlus,
@@ -43,41 +41,46 @@ const SECTION_ACCENT: Record<SectionKey, string> = {
   fallback: "from-muted-foreground/60 to-muted-foreground/40",
 };
 
-const WHY_LABEL = { en: "Trains your feed", tr: "Feed’ini eğitir" };
+// Noise risk: Low = calm/reliable, Medium = neutral/mixed, High = caution.
+const NOISE_RISK_STYLE: Record<NoiseRisk, string> = {
+  Low: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+  Medium: "bg-tangerine/12 text-tangerine",
+  High: "bg-coral/12 text-coral",
+};
 
-function MetaBadge({ children }: { children: ReactNode }) {
+function DetailChip({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-      {children}
+    <span
+      className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${tone ?? "bg-foreground/[0.06] text-muted-foreground"}`}
+    >
+      <span className="opacity-70">{label}: </span>
+      {value}
     </span>
   );
 }
 
-function ResultCard({
-  result,
-  cta,
-  why,
-  demoLabel,
-}: {
-  result: DiscoveryResult;
-  cta: string;
-  why: string;
-  demoLabel: string;
-}) {
+function ResultCard({ result, openLabel, demoLabel }: { result: DiscoveryResult; openLabel: string; demoLabel: string }) {
   return (
     <article className="signal-card group flex flex-col gap-3 rounded-2xl bg-card p-5 pt-6 ring-1 ring-foreground/[0.08] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-aqua/10 hover:ring-aqua/40">
-      {/* platform + type */}
+      {/* Top row: platform + type (direct vs Discovery is communicated by the type badge itself) */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <PlatformIcon platform={result.platform} className="size-4" branded />
           {PLATFORM_SHORT_LABELS[result.platform]}
         </div>
-        <span className="rounded-full bg-tealbrand/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-tealdeep dark:text-aqua">
-          {TYPE_BADGE[result.type]}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {result.isDemo ? (
+            <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[11px] font-medium text-coral">
+              {demoLabel}
+            </span>
+          ) : null}
+          <span className="rounded-full bg-tealbrand/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-tealdeep dark:text-aqua">
+            {TYPE_BADGE[result.type]}
+          </span>
+        </div>
       </div>
 
-      {/* title + handle */}
+      {/* Main: title + what it is + why it matters */}
       <div>
         <h3 className="font-heading text-base font-semibold leading-tight">
           {result.creatorName ?? result.title}
@@ -88,37 +91,42 @@ function ResultCard({
       </div>
 
       {result.shortDescription ? (
-        <p className="text-sm leading-6 text-muted-foreground">
-          {result.shortDescription}
-        </p>
+        <p className="text-sm leading-6 text-muted-foreground">{result.shortDescription}</p>
       ) : null}
 
-      {/* meta badges */}
+      <p className="text-xs leading-5 text-muted-foreground/90">
+        <span className="font-semibold text-foreground/70">{FIELD_LABEL.whyItMatters}: </span>
+        {result.whyItMatters}
+      </p>
+
+      {/* Details: best action, noise risk, niche level, freshness */}
       <div className="flex flex-wrap items-center gap-1.5">
-        {result.popularity ? <MetaBadge>{POPULARITY_BADGE[result.popularity]}</MetaBadge> : null}
-        {result.freshness ? <MetaBadge>{FRESHNESS_BADGE[result.freshness]}</MetaBadge> : null}
-        {result.engagementLabel ? <MetaBadge>{result.engagementLabel}</MetaBadge> : null}
-        {result.itemLanguage ? <MetaBadge>{LANG_BADGE[result.itemLanguage]}</MetaBadge> : null}
-        {result.isDemo ? (
-          <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[11px] font-medium text-coral">
-            {demoLabel}
+        {result.bestAction ? (
+          <span className="rounded-full bg-brand-gradient px-2.5 py-1 text-[11px] font-semibold text-white">
+            {result.bestAction.label}
           </span>
         ) : null}
+        {result.noiseRisk ? (
+          <DetailChip label={FIELD_LABEL.noiseRisk} value={result.noiseRisk} tone={NOISE_RISK_STYLE[result.noiseRisk]} />
+        ) : null}
+        {result.nicheLevel ? <DetailChip label={FIELD_LABEL.nicheLevel} value={result.nicheLevel} /> : null}
+        {result.freshness ? (
+          <DetailChip label={FIELD_LABEL.freshness} value={FRESHNESS_BADGE[result.freshness]} />
+        ) : null}
       </div>
+      {result.bestAction ? (
+        <p className="-mt-1 text-xs leading-5 text-muted-foreground/80">{result.bestAction.description}</p>
+      ) : null}
 
-      {/* why + cta */}
-      <div className="mt-auto flex items-end justify-between gap-3 pt-1">
-        <p className="text-xs leading-5 text-muted-foreground/90">
-          <span className="font-semibold text-foreground/70">{why}: </span>
-          {result.reason}
-        </p>
+      {/* Footer: Open button */}
+      <div className="mt-auto flex justify-end pt-1">
         <Link
           href={result.url}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-gradient px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-aqua/25 transition-all group-hover:shadow-md group-hover:shadow-aqua/30"
         >
-          {cta}
+          {openLabel}
           <ArrowUpRight className="size-3.5" />
         </Link>
       </div>
@@ -176,8 +184,7 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
                   <ResultCard
                     key={item.id}
                     result={item}
-                    cta={t.ctaBySection[key]}
-                    why={WHY_LABEL[lang]}
+                    openLabel={t.openLabel}
                     demoLabel={t.demoTag}
                   />
                 ))}

@@ -28,7 +28,7 @@ export interface Dict {
   safetyNote: string;
   directFallbackNote: string;
   sections: Record<SectionKey, string>;
-  ctaBySection: Record<SectionKey, string>;
+  openLabel: string; // footer "Open" button — same for every card, every section
   muteTitle: string;
   planTitle: string;
   another: string;
@@ -73,23 +73,16 @@ export const translations: Record<UiLang, Dict> = {
     safetyNote:
       "Demo MVP: recommendations are sample signals. Real-time creator/content ranking can be added with search/API integrations.",
     directFallbackNote:
-      "Feed Detox prioritizes direct creators, content, channels and communities. Search links are only used as fallback when curated sources are limited.",
+      "Feed Detox prioritizes direct creators, content, channels and communities — search links appear only in Explore More, when curated sources are limited.",
     sections: {
       creators: "Top creators to follow",
       content: "Direct content to watch",
       fresh: "Fresh & trending signals",
       niche: "Niche quality sources",
       communities: "Communities & newsletters",
-      fallback: "Search fallbacks",
+      fallback: "Explore More",
     },
-    ctaBySection: {
-      creators: "Open creator",
-      content: "Watch content",
-      fresh: "Open signal",
-      niche: "Read source",
-      communities: "Join community",
-      fallback: "Open search fallback",
-    },
+    openLabel: "Open",
     muteTitle: "Mute keywords",
     planTitle: "7-day timeline training plan",
     another: "Build another Feed Pack",
@@ -122,23 +115,16 @@ export const translations: Record<UiLang, Dict> = {
     safetyNote:
       "Demo MVP: öneriler şimdilik sample signal’lardır. Real-time creator/content ranking ileride search/API entegrasyonlarıyla eklenebilir.",
     directFallbackNote:
-      "Feed Detox önce direct creator, content, channel ve community önerir. Search link’leri sadece curated source azsa fallback olarak kullanılır.",
+      "Feed Detox önce direct creator, content, channel ve community önerir — search link’leri sadece curated source azsa Daha Fazla Keşfet’te görünür.",
     sections: {
       creators: "Takip edilecek creator’lar",
       content: "İzlenecek direct content’ler",
       fresh: "Fresh & trending signal’lar",
       niche: "Niche ama kaliteli kaynaklar",
       communities: "Community ve newsletter’lar",
-      fallback: "Search fallback’ler",
+      fallback: "Daha Fazla Keşfet",
     },
-    ctaBySection: {
-      creators: "Creator’ı aç",
-      content: "Content’i izle",
-      fresh: "Signal’ı aç",
-      niche: "Source’u aç",
-      communities: "Community’ye katıl",
-      fallback: "Search fallback’i aç",
-    },
+    openLabel: "Aç",
     muteTitle: "Mute edilecek keyword’ler",
     planTitle: "7 günlük algorithm training plan",
     another: "Yeni Feed Pack oluştur",
@@ -161,7 +147,7 @@ export const TYPE_BADGE: Record<string, string> = {
   newsletter: "Newsletter",
   website: "Source",
   article: "Article",
-  search_action: "Search fallback",
+  search_action: "Discovery",
 };
 
 export const POPULARITY_BADGE: Record<string, string> = {
@@ -172,7 +158,7 @@ export const POPULARITY_BADGE: Record<string, string> = {
 
 export const FRESHNESS_BADGE: Record<string, string> = {
   evergreen: "Evergreen",
-  new: "Fresh",
+  active_recently: "Active recently",
   trending: "Trending",
 };
 
@@ -181,3 +167,13 @@ export const LANG_BADGE: Record<string, string> = {
   tr: "Turkish",
   mixed: "Global",
 };
+
+/** Verified Feed Pack field labels — fixed English copy per product rule
+ * (matches badge vocabulary above), not translated in Turkish mode. */
+export const FIELD_LABEL = {
+  whyItMatters: "Why it matters",
+  bestAction: "Best action",
+  noiseRisk: "Noise risk",
+  nicheLevel: "Niche level",
+  freshness: "Freshness",
+} as const;
