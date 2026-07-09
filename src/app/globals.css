@@ -1,0 +1,285 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-space-grotesk);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Feed Detox brand palette — aquarium tech */
+  --color-tealbrand: #078b9a;
+  --color-aqua: #12afc2;
+  --color-tealdeep: #075e68;
+  --color-limepunch: #b8e34a;
+  --color-limesoft: #d8f36a;
+  --color-coral: #f04e36;
+  --color-tangerine: #ff7a3d;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #faf6ee;
+  --foreground: #101820;
+  --card: #fffdf8;
+  --card-foreground: #101820;
+  --popover: #fffdf8;
+  --popover-foreground: #101820;
+  --primary: #078b9a;
+  --primary-foreground: #faf6ee;
+  --secondary: #e3f0ec;
+  --secondary-foreground: #075e68;
+  --muted: #f0eadf;
+  --muted-foreground: #5c665f;
+  --accent: #eaf5d6;
+  --accent-foreground: #44610c;
+  --destructive: #f04e36;
+  --border: #e8e2d8;
+  --input: #e8e2d8;
+  --ring: #12afc2;
+  --chart-1: #078b9a;
+  --chart-2: #12afc2;
+  --chart-3: #b8e34a;
+  --chart-4: #f04e36;
+  --chart-5: #ff7a3d;
+  --radius: 0.9rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: #06282d;
+  --foreground: #f2f7f2;
+  --card: #0a383f;
+  --card-foreground: #f2f7f2;
+  --popover: #0a383f;
+  --popover-foreground: #f2f7f2;
+  --primary: #12afc2;
+  --primary-foreground: #06282d;
+  --secondary: #0d4750;
+  --secondary-foreground: #d8f36a;
+  --muted: #0d4149;
+  --muted-foreground: #9fb8b3;
+  --accent: #12505a;
+  --accent-foreground: #d8f36a;
+  --destructive: #ff7a3d;
+  --border: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: #12afc2;
+  --chart-1: #12afc2;
+  --chart-2: #078b9a;
+  --chart-3: #b8e34a;
+  --chart-4: #f04e36;
+  --chart-5: #ff7a3d;
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0) scale(1);
+  }
+  50% {
+    transform: translateY(-22px) translateX(14px) scale(1.05);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(18, 175, 194, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 36px 8px rgba(18, 175, 194, 0.16);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slowSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer utilities {
+  /* Brand gradient — deep teal → aqua → lime ("liquid" feel). */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(100deg, #078b9a, #12afc2 45%, #b8e34a);
+  }
+  .bg-brand-gradient {
+    background-image: linear-gradient(120deg, #078b9a, #12afc2 50%, #8fc93b);
+    background-size: 180% 180%;
+    animation: gradientShift 8s ease infinite;
+  }
+  .bg-coral-gradient {
+    background-image: linear-gradient(120deg, #f04e36, #ff7a3d);
+  }
+
+  /* Soft glass card over the cream background. */
+  .glass-card {
+    background: rgba(255, 253, 248, 0.66);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+  .dark .glass-card {
+    background: rgba(10, 56, 63, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Animated liquid gradient border (teal → lime → coral → aqua). */
+  .glow-border {
+    border: 2px solid transparent;
+    background:
+      linear-gradient(var(--card), var(--card)) padding-box,
+      linear-gradient(120deg, #078b9a, #b8e34a, #ff7a3d, #12afc2, #078b9a)
+        border-box;
+    background-size:
+      100% 100%,
+      300% 300%;
+    animation:
+      gradientShift 7s ease infinite,
+      pulseGlow 5s ease-in-out infinite;
+  }
+
+  /* Floating feed-bubble orbs. */
+  .floating-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(52px);
+    pointer-events: none;
+    animation: float 10s ease-in-out infinite;
+  }
+
+  /* Result "signal" card with a gradient top accent. */
+  .signal-card {
+    position: relative;
+    overflow: hidden;
+  }
+  .signal-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #078b9a, #12afc2, #b8e34a, #ff7a3d);
+    background-size: 250% 100%;
+    animation: gradientShift 6s ease infinite;
+  }
+
+  .fade-up {
+    animation: fadeUp 0.55s ease-out both;
+  }
+  .animate-slow-spin {
+    animation: slowSpin 26s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .floating-orb,
+    .fade-up,
+    .animate-slow-spin,
+    .bg-brand-gradient,
+    .glow-border,
+    .signal-card::before {
+      animation: none;
+    }
+    .fade-up {
+      opacity: 1;
+    }
+  }
+}
