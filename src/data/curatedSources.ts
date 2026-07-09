@@ -345,7 +345,7 @@ export const curatedSources: CuratedSource[] = [
     type: "community",
     source: "curated",
     confidence: "likely",
-    tags: ["productivity", "verimlilik", "focus", "habits", "study"],
+    tags: ["productivity", "verimlilik", "focus", "habits", "study", "career", "kariyer"],
     reason: "Systems people actually use — mute the hustle bros after joining.",
   },
   // Health

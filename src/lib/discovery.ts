@@ -215,13 +215,22 @@ export function guardResults(results: DiscoveryResult[]): DiscoveryResult[] {
 
 const CONFIDENCE_SCORE = { verified: 1, likely: 0.8, search_action: 0.55 };
 const SOURCE_SCORE = { api: 1, web_search: 0.9, curated: 0.85, generated_search_url: 0.6 };
+const FRESHNESS_SCORE = { trending: 1, new: 0.75, evergreen: 0.5 };
+const ENGAGEMENT_SCORE: Record<string, number> = {
+  "High engagement": 1,
+  Popular: 0.85,
+  "Editor pick": 0.75,
+  Rising: 0.7,
+  "Niche quality": 0.6,
+};
 
 /**
- * final_score = 0.25 relevance + 0.20 direct_link_quality + 0.15 authority
- *             + 0.15 link_validity + 0.15 freshness + 0.10 training_value
- * Direct links always outrank discovery links within a section. Freshness is
- * constant for now (no live data); diversity is applied by capping
- * per-platform counts during assembly.
+ * final_score = 0.22 relevance + 0.20 direct_link_quality + 0.13 authority
+ *             + 0.13 link_validity + 0.12 freshness + 0.10 engagement
+ *             + 0.10 training_value
+ * Direct links always outrank discovery links within a section; trending/new
+ * and higher-engagement items rise within that. Diversity is applied by
+ * capping per-platform counts during assembly.
  */
 export function scoreResult(r: DiscoveryResult, topics: string[]): number {
   const hay = `${r.title} ${r.rawQuery ?? ""} ${r.snippet ?? ""}`.toLowerCase();
@@ -232,9 +241,17 @@ export function scoreResult(r: DiscoveryResult, topics: string[]): number {
   const direct = r.isDirectLink ? 1 : 0.35;
   const validity = CONFIDENCE_SCORE[r.confidence];
   const authority = SOURCE_SCORE[r.source];
+  const freshness = r.freshness ? FRESHNESS_SCORE[r.freshness] : 0.5;
+  const engagement = r.engagementLabel ? (ENGAGEMENT_SCORE[r.engagementLabel] ?? 0.5) : 0.5;
   const trainingValue = r.type === "search_action" ? 0.9 : 0.7;
   return (
-    0.25 * relevance + 0.2 * direct + 0.15 * authority + 0.15 * validity + 0.15 * 0.5 + 0.1 * trainingValue
+    0.22 * relevance +
+    0.2 * direct +
+    0.13 * authority +
+    0.13 * validity +
+    0.12 * freshness +
+    0.1 * engagement +
+    0.1 * trainingValue
   );
 }
 

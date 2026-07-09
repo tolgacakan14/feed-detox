@@ -35,15 +35,21 @@ const PILL_TOPICS: Record<string, string> = {
   Career: "career",
   Music: "music",
   Fashion: "streetwear",
+  Turkish: "turkish content",
+  English: "english content",
+  "No Politics": "no politics",
 };
 
 const LESS_MARKERS = ["less ", "no ", "without ", "fewer ", "daha az ", "-"];
 const FILLER =
   /\b(i want|i'd like|more of|more|please|content|stuff|daha fazla|istiyorum)\b/gi;
 
+const NO_POLITICS_PHRASE = /^no[\s-]?politics\b/;
+
 function parsePrompt(prompt: string, pills: string[]) {
   const topics: string[] = [];
   const unwanted: string[] = [];
+  let wantsNoPoliticsFromText = false;
 
   const segments = prompt
     .toLowerCase()
@@ -52,6 +58,15 @@ function parsePrompt(prompt: string, pills: string[]) {
     .filter(Boolean);
 
   for (const raw of segments) {
+    // "no politics" named on its own means "give me a clean feed" (a topic
+    // to match), not "avoid the word politics" — don't let it get swallowed
+    // by the LESS_MARKERS negation below, or the No-politics clean feed
+    // category becomes unreachable by its own name.
+    if (NO_POLITICS_PHRASE.test(raw)) {
+      if (!topics.includes("no politics")) topics.push("no politics");
+      wantsNoPoliticsFromText = true;
+      continue;
+    }
     const marker = LESS_MARKERS.find((m) => raw.startsWith(m));
     const cleaned = (marker ? raw.slice(marker.length) : raw)
       .replace(FILLER, "")
@@ -67,6 +82,7 @@ function parsePrompt(prompt: string, pills: string[]) {
   }
 
   const wantsNoPolitics =
+    wantsNoPoliticsFromText ||
     pills.includes("No Politics") ||
     unwanted.some((t) => /politic|siyaset|gündem/.test(t));
 
@@ -108,8 +124,13 @@ const SECTION_CAPS: Record<SectionKey, number> = {
   fresh: 4,
   niche: 4,
   communities: 5,
-  fallback: 5,
+  fallback: 2, // hard product cap — fallback never dominates a pack
 };
+
+/** Product rule: search fallback links only appear when direct curated
+ * matches are scarce, and never more than 2 of them. */
+const MIN_DIRECT_BEFORE_FALLBACK = 6;
+const MAX_FALLBACK_ITEMS = 2;
 
 const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
   creators: [],
@@ -146,6 +167,49 @@ function groupResults(items: DiscoveryResult[], topics: string[]) {
   return buckets;
 }
 
+// ── Generic discovery pool ──────────────────────────────────────────────────
+// A handful of broad, genuinely direct (non-search) destinations used only
+// when a topic has zero curated matches, so an unknown topic still returns a
+// pack that leads with real links instead of jumping straight to fallback.
+
+const GENERIC_DIRECT_POOL: DiscoveryResult[] = [
+  {
+    id: "generic-ted", title: "TED", url: "https://www.youtube.com/@TED",
+    platform: "youtube", type: "video", source: "curated", confidence: "verified",
+    isDirectLink: true, isDemo: true, creatorName: "TED", handle: "@TED",
+    category: "General", itemLanguage: "en", popularity: "global",
+    freshness: "evergreen", engagementLabel: "High engagement",
+    shortDescription: "Ideas worth spreading, on any topic worth learning.",
+    reason: "A reliable starting point while we don't have a curated match for your exact topic yet.",
+  },
+  {
+    id: "generic-hn", title: "Hacker News", url: "https://news.ycombinator.com/",
+    platform: "web", type: "website", source: "curated", confidence: "verified",
+    isDirectLink: true, isDemo: true, category: "General", itemLanguage: "en",
+    popularity: "global", freshness: "evergreen", engagementLabel: "Popular",
+    shortDescription: "Broad, high-signal link aggregator across tech and beyond.",
+    reason: "Useful general discovery while your specific topic isn't in our curated set.",
+  },
+  {
+    id: "generic-reddit-til", title: "r/todayilearned",
+    url: "https://www.reddit.com/r/todayilearned/", platform: "reddit",
+    type: "community", source: "curated", confidence: "likely",
+    isDirectLink: true, isDemo: true, category: "General", itemLanguage: "en",
+    popularity: "global", freshness: "evergreen", engagementLabel: "Popular",
+    shortDescription: "A large, moderated community for genuinely interesting finds.",
+    reason: "A safe direct community to join while we build out coverage for this topic.",
+  },
+  {
+    id: "generic-producthunt", title: "Product Hunt",
+    url: "https://www.producthunt.com/", platform: "web", type: "website",
+    source: "curated", confidence: "verified", isDirectLink: true, isDemo: true,
+    category: "General", itemLanguage: "en", popularity: "global",
+    freshness: "new", engagementLabel: "Rising",
+    shortDescription: "Daily launches across every category, not just tech.",
+    reason: "Real, browsable source while curated coverage for your topic expands.",
+  },
+];
+
 // ── Main generator ─────────────────────────────────────────────────────────
 
 export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackResult> {
@@ -173,16 +237,32 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     );
   }
 
-  // Validate + guard everything that claims to be a real destination.
-  const realPool = await validateResults(guardResults([...demo, ...curated, ...searched]));
+  // Validate + guard everything that claims to be a real destination, then
+  // dedupe (demo + curated commonly point at the same URL for a topic) —
+  // the fallback decision below must count unique destinations, not raw hits.
+  let realPool = dedupeByUrl(await validateResults(guardResults([...demo, ...curated, ...searched])));
 
-  // 3) Search fallbacks — real platform search pages, shown only at the bottom.
-  const fallbacks: DiscoveryResult[] = [
-    searchAction("youtube", t, "Open and finish 2–3 results — watch time is YouTube's strongest signal."),
-    searchAction("x", t, "Follow 3–5 accounts here that post analysis, not outrage."),
-    searchAction("tiktok", t, "Watch a few results fully — your For You page updates within days."),
-    searchAction("reddit", intel.searchQueries[1] ?? t),
-  ];
+  // If the topic has zero curated matches, fall back to a small set of
+  // broad, genuinely direct destinations rather than jumping straight to
+  // search links — the pack should still lead with real, clickable sources.
+  const isGenericDiscovery = realPool.length === 0;
+  if (isGenericDiscovery) {
+    realPool = GENERIC_DIRECT_POOL;
+  }
+
+  // 3) Search fallbacks — real platform search pages. These are ONLY added
+  // when direct matches are scarce, and never more than MAX_FALLBACK_ITEMS.
+  // This is the core product rule: search links are fallback, not the
+  // main output. Most topics (10+ curated categories) never trigger this.
+  const fallbacks: DiscoveryResult[] =
+    realPool.length < MIN_DIRECT_BEFORE_FALLBACK
+      ? [
+          searchAction("youtube", t, "Open and finish 2–3 results — watch time is YouTube's strongest signal."),
+          searchAction("x", t, "Follow 3–5 accounts here that post analysis, not outrage."),
+          searchAction("tiktok", t, "Watch a few results fully — your For You page updates within days."),
+          searchAction("reddit", intel.searchQueries[1] ?? t),
+        ].slice(0, MAX_FALLBACK_ITEMS)
+      : [];
 
   const sections = groupResults([...realPool, ...fallbacks], topics);
 
@@ -198,8 +278,11 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     ]),
   ).slice(0, 8);
 
-  const summary =
-    input.uiLang === "tr"
+  const summary = isGenericDiscovery
+    ? input.uiLang === "tr"
+      ? `“${t}” henüz curated kaynak setimizde yok, o yüzden geniş kapsamlı direct source’lar getirdik. Bu konuya özel real-time source discovery ileride eklenebilir.`
+      : `“${t}” isn't in our curated set yet, so here are broad direct sources to start with. Topic-specific real-time source discovery can be added later.`
+    : input.uiLang === "tr"
       ? `“${t}” için en iyi creator, content ve community’ler — her biri feed’ine ne katıyorsa ona göre gruplandı.`
       : `The best creators, content and communities for “${t}” — grouped by what each one does for your feed.`;
 

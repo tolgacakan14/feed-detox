@@ -26,6 +26,7 @@ export interface Dict {
   // Result
   resultTitle: string;
   safetyNote: string;
+  directFallbackNote: string;
   sections: Record<SectionKey, string>;
   ctaBySection: Record<SectionKey, string>;
   muteTitle: string;
@@ -71,13 +72,15 @@ export const translations: Record<UiLang, Dict> = {
     resultTitle: "Your Feed Education Pack is ready.",
     safetyNote:
       "Demo MVP: recommendations are sample signals. Real-time creator/content ranking can be added with search/API integrations.",
+    directFallbackNote:
+      "Feed Detox prioritizes direct creators, content, channels and communities. Search links are only used as fallback when curated sources are limited.",
     sections: {
       creators: "Top creators to follow",
-      content: "Popular content to watch",
+      content: "Direct content to watch",
       fresh: "Fresh & trending signals",
       niche: "Niche quality sources",
       communities: "Communities & newsletters",
-      fallback: "Explore more (search fallback)",
+      fallback: "Search fallbacks",
     },
     ctaBySection: {
       creators: "Open creator",
@@ -85,7 +88,7 @@ export const translations: Record<UiLang, Dict> = {
       fresh: "Open signal",
       niche: "Read source",
       communities: "Join community",
-      fallback: "Open discovery",
+      fallback: "Open search fallback",
     },
     muteTitle: "Mute keywords",
     planTitle: "7-day timeline training plan",
@@ -118,13 +121,15 @@ export const translations: Record<UiLang, Dict> = {
     resultTitle: "Feed Pack’in hazır.",
     safetyNote:
       "Demo MVP: öneriler şimdilik sample signal’lardır. Real-time creator/content ranking ileride search/API entegrasyonlarıyla eklenebilir.",
+    directFallbackNote:
+      "Feed Detox önce direct creator, content, channel ve community önerir. Search link’leri sadece curated source azsa fallback olarak kullanılır.",
     sections: {
       creators: "Takip edilecek creator’lar",
-      content: "İzlenecek popular content’ler",
+      content: "İzlenecek direct content’ler",
       fresh: "Fresh & trending signal’lar",
       niche: "Niche ama kaliteli kaynaklar",
       communities: "Community ve newsletter’lar",
-      fallback: "Daha fazla keşfet (search fallback)",
+      fallback: "Search fallback’ler",
     },
     ctaBySection: {
       creators: "Creator’ı aç",
@@ -132,7 +137,7 @@ export const translations: Record<UiLang, Dict> = {
       fresh: "Signal’ı aç",
       niche: "Source’u aç",
       communities: "Community’ye katıl",
-      fallback: "Discovery’i aç",
+      fallback: "Search fallback’i aç",
     },
     muteTitle: "Mute edilecek keyword’ler",
     planTitle: "7 günlük algorithm training plan",

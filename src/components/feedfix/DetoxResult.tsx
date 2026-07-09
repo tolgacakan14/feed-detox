@@ -144,6 +144,9 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
           {result.summary}
         </p>
         <p className="mt-4 border-t border-foreground/10 pt-3 text-xs leading-5 text-muted-foreground/80">
+          {t.directFallbackNote}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground/60">
           {t.safetyNote}
         </p>
       </header>
