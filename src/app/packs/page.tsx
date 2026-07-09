@@ -18,7 +18,7 @@ export default function PacksPage() {
           Ready-made Feed Packs
         </h1>
         <p className="mx-auto mt-3 max-w-md text-balance text-muted-foreground">
-          Not sure where to start? Open one of these to see what Detox Bot builds.
+          Not sure where to start? Open one of these to see what Feed Detox builds.
         </p>
       </div>
       <SamplePacks />

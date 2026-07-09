@@ -30,7 +30,7 @@ export function Header() {
           className="rounded-full border-0 bg-brand-gradient px-4 text-white transition-opacity hover:opacity-90"
           render={
             <CtaLink href="/#chat" ctaId="header-primary">
-              Try Detox ✨
+              Try Feed Detox
             </CtaLink>
           }
         />

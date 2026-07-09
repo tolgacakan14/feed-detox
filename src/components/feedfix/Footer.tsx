@@ -21,7 +21,7 @@ export function Footer() {
           <div>
             <p className="font-medium">Product</p>
             <ul className="mt-3 space-y-2 text-muted-foreground">
-              <li><Link href="/#chat" className="hover:text-foreground">Detox Bot</Link></li>
+              <li><Link href="/#chat" className="hover:text-foreground">Feed Pack</Link></li>
               <li><Link href="/packs" className="hover:text-foreground">Sample Packs</Link></li>
             </ul>
           </div>

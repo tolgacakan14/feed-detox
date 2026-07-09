@@ -1,281 +1,245 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
-  Bot,
   CalendarDays,
+  Compass,
+  Gem,
+  MessagesSquare,
   PlayCircle,
-  Search,
+  TrendingUp,
   UserPlus,
-  Users,
   VolumeX,
+  type LucideIcon,
 } from "lucide-react";
 import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
 import { PLATFORM_SHORT_LABELS } from "@/lib/platform";
 import { Badge } from "@/components/ui/badge";
-import type {
-  DiscoveryResult,
-  DiscoveryType,
-  FeedPackResult,
-  SectionKey,
-  UiLang,
-} from "@/types";
+import {
+  FRESHNESS_BADGE,
+  LANG_BADGE,
+  POPULARITY_BADGE,
+  SECTION_ORDER,
+  TYPE_BADGE,
+  translations,
+} from "@/lib/i18n";
+import type { DiscoveryResult, FeedPackResult, SectionKey } from "@/types";
 
-const COPY: Record<
-  UiLang,
-  {
-    ready: string;
-    signalsFound: (n: number, topic: string) => string;
-    mix: string;
-    sections: Record<SectionKey, string>;
-    openBySection: Record<SectionKey, string>;
-    mute: string;
-    plan: string;
-    another: string;
-    badges: Record<DiscoveryType, string>;
-  }
-> = {
-  en: {
-    ready: "Your Feed Pack is ready.",
-    signalsFound: (n, topic) => `${n} signals found for “${topic}”`,
-    mix: "Mix: global + niche + discovery links",
-    sections: {
-      follow: "Top Accounts & Sources",
-      watch: "Top Videos & Shorts",
-      join: "Communities",
-      search: "Explore More",
-    },
-    openBySection: {
-      follow: "Follow signal",
-      watch: "Watch signal",
-      join: "Join signal",
-      search: "Search signal",
-    },
-    mute: "Mute / Avoid",
-    plan: "Train your feed — 7 days",
-    another: "Build another pack",
-    badges: {
-      account: "Account",
-      channel: "Channel",
-      video: "Video",
-      community: "Community",
-      website: "Source",
-      newsletter: "Newsletter",
-      search_action: "Discovery",
-    },
-  },
-  tr: {
-    ready: "Feed Paketin hazır.",
-    signalsFound: (n, topic) => `“${topic}” için ${n} sinyal bulundu`,
-    mix: "Karışım: global + niş + keşif linkleri",
-    sections: {
-      follow: "En İyi Hesaplar ve Kaynaklar",
-      watch: "En İyi Videolar ve Shorts",
-      join: "Topluluklar",
-      search: "Daha Fazla Keşfet",
-    },
-    openBySection: {
-      follow: "Takip sinyali",
-      watch: "İzleme sinyali",
-      join: "Katılım sinyali",
-      search: "Arama sinyali",
-    },
-    mute: "Sessize al / Kaçın",
-    plan: "Akışını eğit — 7 gün",
-    another: "Yeni paket oluştur",
-    badges: {
-      account: "Hesap",
-      channel: "Kanal",
-      video: "Video",
-      community: "Topluluk",
-      website: "Kaynak",
-      newsletter: "Bülten",
-      search_action: "Keşif",
-    },
-  },
+const SECTION_ICON: Record<SectionKey, LucideIcon> = {
+  creators: UserPlus,
+  content: PlayCircle,
+  fresh: TrendingUp,
+  niche: Gem,
+  communities: MessagesSquare,
+  fallback: Compass,
 };
 
-const SECTION_META: Record<SectionKey, { icon: typeof UserPlus; gradient: string }> = {
-  follow: { icon: UserPlus, gradient: "from-tealbrand to-aqua" },
-  watch: { icon: PlayCircle, gradient: "from-coral to-tangerine" },
-  join: { icon: Users, gradient: "from-limepunch to-emerald-500" },
-  search: { icon: Search, gradient: "from-aqua to-tealdeep" },
+const SECTION_ACCENT: Record<SectionKey, string> = {
+  creators: "from-tealbrand to-aqua",
+  content: "from-coral to-tangerine",
+  fresh: "from-aqua to-tealbrand",
+  niche: "from-tealdeep to-tealbrand",
+  communities: "from-limepunch to-emerald-500",
+  fallback: "from-muted-foreground/60 to-muted-foreground/40",
 };
 
-const SECTION_ORDER: SectionKey[] = ["follow", "watch", "join", "search"];
+const WHY_LABEL = { en: "Trains your feed", tr: "Feed’ini eğitir" };
 
-const BADGE_STYLE: Record<DiscoveryType, string> = {
-  account: "border-0 bg-tealbrand/15 text-tealdeep dark:text-aqua",
-  channel: "border-0 bg-tealbrand/15 text-tealdeep dark:text-aqua",
-  video: "border-0 bg-coral/12 text-coral dark:text-tangerine",
-  community: "border-0 bg-limepunch/25 text-accent-foreground dark:text-limepunch",
-  website: "border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  newsletter: "border-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  search_action: "border-0 bg-aqua/15 text-tealbrand dark:text-aqua",
-};
+function MetaBadge({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+      {children}
+    </span>
+  );
+}
 
 function ResultCard({
   result,
-  openLabel,
-  badgeLabel,
+  cta,
+  why,
+  demoLabel,
 }: {
   result: DiscoveryResult;
-  openLabel: string;
-  badgeLabel: string;
+  cta: string;
+  why: string;
+  demoLabel: string;
 }) {
   return (
-    <div className="signal-card flex flex-col gap-2.5 rounded-2xl bg-card p-4 pt-5 ring-1 ring-foreground/10 transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-aqua/15 hover:ring-aqua/50">
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 text-sm font-semibold leading-5">{result.title}</p>
+    <article className="signal-card group flex flex-col gap-3 rounded-2xl bg-card p-5 pt-6 ring-1 ring-foreground/[0.08] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-aqua/10 hover:ring-aqua/40">
+      {/* platform + type */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <PlatformIcon platform={result.platform} className="size-4" branded />
+          {PLATFORM_SHORT_LABELS[result.platform]}
+        </div>
+        <span className="rounded-full bg-tealbrand/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-tealdeep dark:text-aqua">
+          {TYPE_BADGE[result.type]}
+        </span>
+      </div>
+
+      {/* title + handle */}
+      <div>
+        <h3 className="font-heading text-base font-semibold leading-tight">
+          {result.creatorName ?? result.title}
+        </h3>
+        {result.handle ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">{result.handle}</p>
+        ) : null}
+      </div>
+
+      {result.shortDescription ? (
+        <p className="text-sm leading-6 text-muted-foreground">
+          {result.shortDescription}
+        </p>
+      ) : null}
+
+      {/* meta badges */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {result.popularity ? <MetaBadge>{POPULARITY_BADGE[result.popularity]}</MetaBadge> : null}
+        {result.freshness ? <MetaBadge>{FRESHNESS_BADGE[result.freshness]}</MetaBadge> : null}
+        {result.engagementLabel ? <MetaBadge>{result.engagementLabel}</MetaBadge> : null}
+        {result.itemLanguage ? <MetaBadge>{LANG_BADGE[result.itemLanguage]}</MetaBadge> : null}
+        {result.isDemo ? (
+          <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[11px] font-medium text-coral">
+            {demoLabel}
+          </span>
+        ) : null}
+      </div>
+
+      {/* why + cta */}
+      <div className="mt-auto flex items-end justify-between gap-3 pt-1">
+        <p className="text-xs leading-5 text-muted-foreground/90">
+          <span className="font-semibold text-foreground/70">{why}: </span>
+          {result.reason}
+        </p>
         <Link
           href={result.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-aqua/25 transition-opacity hover:opacity-90"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-gradient px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-aqua/25 transition-all group-hover:shadow-md group-hover:shadow-aqua/30"
         >
-          {openLabel}
-          <ArrowUpRight className="size-3" />
+          {cta}
+          <ArrowUpRight className="size-3.5" />
         </Link>
       </div>
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="gap-1.5">
-          <PlatformIcon platform={result.platform} className="size-3" branded />
-          {PLATFORM_SHORT_LABELS[result.platform]}
-        </Badge>
-        <Badge className={BADGE_STYLE[result.type]}>{badgeLabel}</Badge>
-      </div>
-
-      <p className="text-xs leading-5 text-muted-foreground">{result.reason}</p>
-    </div>
+    </article>
   );
 }
 
 export function DetoxResult({ result }: { result: FeedPackResult }) {
-  const copy = COPY[result.input.uiLang];
-  const totalSignals =
-    result.metadata.verifiedLinksCount + result.metadata.searchActionsCount;
+  const lang = result.input.uiLang;
+  const t = translations[lang];
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10 sm:px-6 sm:py-14">
-      {/* User chat bubble */}
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-3xl rounded-br-md bg-brand-gradient px-5 py-3.5 text-left text-sm font-medium text-white shadow-lg shadow-aqua/20">
-          <p>{result.input.prompt || result.topics.join(", ")}</p>
-          {result.input.pills.length > 0 ? (
-            <p className="mt-1.5 text-xs text-white/80">
-              {result.input.pills.map((p) => `#${p.replace(/\s+/g, "")}`).join(" ")}
-            </p>
-          ) : null}
-        </div>
-      </div>
+    <div className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-12 sm:px-6 sm:py-16">
+      {/* Header panel */}
+      <header className="fade-up glass-card rounded-3xl p-6 shadow-lg shadow-aqua/5 sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tealbrand dark:text-aqua">
+          Feed Detox
+        </p>
+        <h1 className="mt-2 text-balance font-heading text-2xl font-bold tracking-tight sm:text-3xl">
+          {t.resultTitle}
+        </h1>
+        <p className="mt-2 max-w-2xl text-balance text-muted-foreground">
+          {result.summary}
+        </p>
+        <p className="mt-4 border-t border-foreground/10 pt-3 text-xs leading-5 text-muted-foreground/80">
+          {t.safetyNote}
+        </p>
+      </header>
 
-      {/* Detox Bot reply */}
-      <div className="flex items-start gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white shadow-md shadow-aqua/30">
-          <Bot className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold text-foreground/80">Detox Bot</p>
-          <div className="fade-up mt-1 rounded-3xl rounded-tl-md bg-muted/70 px-4 py-3 text-sm text-foreground/90 sm:px-5">
-            <p className="font-heading text-base font-bold">{copy.ready}</p>
-            <p className="mt-1.5">{result.summary}</p>
-            <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-tealbrand dark:text-limepunch">
-              <span>
-                📡 {copy.signalsFound(totalSignals, result.topics[0] ?? "")}
-              </span>
-              <span>{copy.mix}</span>
-            </p>
-          </div>
-
-          <div className="mt-6 flex flex-col gap-8">
-            {SECTION_ORDER.map((key, sectionIndex) => {
-              const items = result.sections[key];
-              if (items.length === 0) return null;
-              const meta = SECTION_META[key];
-              return (
-                <section
-                  key={key}
-                  className="fade-up"
-                  style={{ animationDelay: `${0.1 + sectionIndex * 0.12}s` }}
-                >
-                  <h2 className="flex items-center gap-2.5 font-heading text-lg font-bold">
-                    <span
-                      className={`flex size-8 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md ${meta.gradient}`}
-                    >
-                      <meta.icon className="size-4" />
-                    </span>
-                    {copy.sections[key]}
-                  </h2>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {items.map((item) => (
-                      <ResultCard
-                        key={item.id}
-                        result={item}
-                        openLabel={copy.openBySection[key]}
-                        badgeLabel={copy.badges[item.type]}
-                      />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-
-            {/* Mute keywords */}
-            {result.muteKeywords.length > 0 ? (
-              <section className="fade-up [animation-delay:0.55s]">
-                <h2 className="flex items-center gap-2.5 font-heading text-lg font-bold">
-                  <span className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-tealdeep to-slate-800 text-white shadow-md">
-                    <VolumeX className="size-4" />
-                  </span>
-                  {copy.mute}
-                </h2>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {result.muteKeywords.map((keyword) => (
-                    <Badge key={keyword} variant="secondary" className="text-sm">
-                      🔇 {keyword}
-                    </Badge>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {/* 7-day plan */}
-            <section className="fade-up [animation-delay:0.65s]">
+      {/* Sections */}
+      <div className="flex flex-col gap-10">
+        {SECTION_ORDER.map((key, i) => {
+          const items = result.sections[key];
+          if (items.length === 0) return null;
+          const Icon = SECTION_ICON[key];
+          return (
+            <section
+              key={key}
+              className="fade-up"
+              style={{ animationDelay: `${0.06 * i}s` }}
+            >
               <h2 className="flex items-center gap-2.5 font-heading text-lg font-bold">
-                <span className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-limepunch to-emerald-500 text-white shadow-md">
-                  <CalendarDays className="size-4" />
+                <span
+                  className={`flex size-8 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-sm ${SECTION_ACCENT[key]}`}
+                >
+                  <Icon className="size-4" />
                 </span>
-                {copy.plan}
+                {t.sections[key]}
               </h2>
-              <ol className="mt-3 flex flex-col gap-2.5">
-                {result.trainingPlan.map((day) => (
-                  <li
-                    key={day.day}
-                    className="flex gap-3.5 rounded-2xl bg-card p-4 ring-1 ring-foreground/10"
-                  >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-sm font-bold text-white">
-                      {day.day}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold">{day.title}</p>
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        {day.description}
-                      </p>
-                    </div>
-                  </li>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {items.map((item) => (
+                  <ResultCard
+                    key={item.id}
+                    result={item}
+                    cta={t.ctaBySection[key]}
+                    why={WHY_LABEL[lang]}
+                    demoLabel={t.demoTag}
+                  />
                 ))}
-              </ol>
+              </div>
             </section>
+          );
+        })}
 
-            <div className="text-center">
-              <Link
-                href="/"
-                className="inline-flex h-11 items-center gap-2 rounded-full bg-brand-gradient px-6 text-sm font-semibold text-white shadow-lg shadow-aqua/25 transition-opacity hover:opacity-90"
-              >
-                {copy.another} ✨
-              </Link>
+        {/* Mute keywords */}
+        {result.muteKeywords.length > 0 ? (
+          <section className="fade-up">
+            <h2 className="flex items-center gap-2.5 font-heading text-lg font-bold">
+              <span className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-tealdeep to-slate-700 text-white shadow-sm">
+                <VolumeX className="size-4" />
+              </span>
+              {t.muteTitle}
+            </h2>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {result.muteKeywords.map((keyword) => (
+                <span
+                  key={keyword}
+                  className="rounded-full bg-foreground/[0.06] px-3 py-1 text-sm font-medium text-muted-foreground line-through decoration-coral/50"
+                >
+                  {keyword}
+                </span>
+              ))}
             </div>
-          </div>
+          </section>
+        ) : null}
+
+        {/* 7-day plan */}
+        <section className="fade-up">
+          <h2 className="flex items-center gap-2.5 font-heading text-lg font-bold">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-limepunch to-emerald-500 text-white shadow-sm">
+              <CalendarDays className="size-4" />
+            </span>
+            {t.planTitle}
+          </h2>
+          <ol className="mt-4 grid gap-3 sm:grid-cols-2">
+            {result.trainingPlan.map((day) => (
+              <li
+                key={day.day}
+                className="flex gap-3.5 rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.08]"
+              >
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-xs font-bold text-white">
+                  {day.day}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">{day.title}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {day.description}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <div className="pt-2 text-center">
+          <Link
+            href="/"
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-brand-gradient px-6 text-sm font-semibold text-white shadow-lg shadow-aqua/25 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-aqua/30"
+          >
+            {t.another}
+          </Link>
         </div>
       </div>
     </div>

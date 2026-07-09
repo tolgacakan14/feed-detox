@@ -25,16 +25,16 @@ export function EarlyAccess() {
           className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-white/15 blur-2xl"
         />
         <h2 className="text-balance font-heading text-2xl font-bold sm:text-3xl">
-          Get early access ⚡
+          Get early access
         </h2>
         <p className="mx-auto mt-3 max-w-md text-balance text-sm text-white/85">
-          Real verified creators, AI-powered packs and weekly feed refreshes are
-          coming. Be first in line. Erken erişim için e-postanı bırak. 🇹🇷
+          Real-time creator ranking, verified profiles and weekly Feed Pack
+          refreshes are coming. Be first in line.
         </p>
 
         {status === "done" ? (
           <p className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full bg-white/20 px-5 py-2.5 text-sm font-semibold backdrop-blur">
-            <Check className="size-4" /> You&apos;re on the list! Listedesin! 🎉
+            <Check className="size-4" /> You&apos;re on the list.
           </p>
         ) : (
           <div className="mx-auto mt-6 flex max-w-md flex-col gap-2 sm:flex-row">

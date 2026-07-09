@@ -25,17 +25,34 @@ export type SourceOrigin = "api" | "web_search" | "curated" | "generated_search_
 export type Confidence = "verified" | "likely" | "search_action";
 
 export type DiscoveryType =
-  | "account"
-  | "channel"
+  | "creator"
+  | "account" // legacy alias for creator (X/IG/TikTok profile)
+  | "channel" // YouTube channel — displayed as Creator
   | "video"
+  | "post"
   | "community"
-  | "website"
   | "newsletter"
-  | "search_action";
+  | "website"
+  | "article"
+  | "search_action"; // a platform search page — labelled "Search fallback"
+
+/** Curated demo signal metadata (structured now so real-time ranking can
+ * plug in later). These labels are sample/demo values, not live engagement. */
+export type Popularity = "global" | "niche" | "emerging";
+export type Freshness = "evergreen" | "new" | "trending";
+export type EngagementLabel =
+  | "High engagement"
+  | "Popular"
+  | "Rising"
+  | "Editor pick"
+  | "Niche quality";
+export type ItemLang = "en" | "tr" | "mixed";
 
 /**
  * A single recommendation. The anti-hallucination guard rejects any result
  * whose url/source/confidence combination breaks the rules (see lib/discovery).
+ * Rich fields (creatorName…isDemo) are present on curated demo signals and
+ * absent on generated search fallbacks.
  */
 export interface DiscoveryResult {
   id: string;
@@ -46,11 +63,21 @@ export interface DiscoveryResult {
   source: SourceOrigin;
   confidence: Confidence;
   /** true only for actual profiles/channels/videos/communities/websites;
-   * false for discovery/search pages. Follow requires true. */
+   * false for discovery/search pages. */
   isDirectLink: boolean;
   reason: string; // short "why this trains your algorithm"
   snippet?: string;
   rawQuery?: string; // the search query behind a search_action
+  // ── Curated demo signal metadata (optional) ──
+  creatorName?: string;
+  handle?: string;
+  category?: string;
+  itemLanguage?: ItemLang;
+  popularity?: Popularity;
+  freshness?: Freshness;
+  engagementLabel?: EngagementLabel;
+  shortDescription?: string;
+  isDemo?: boolean;
 }
 
 export interface FeedPackInput {
@@ -65,7 +92,13 @@ export interface DayPlanItem {
   description: string;
 }
 
-export type SectionKey = "follow" | "watch" | "join" | "search";
+export type SectionKey =
+  | "creators" // Top creators to follow
+  | "content" // Popular content to watch
+  | "fresh" // Fresh & trending signals
+  | "niche" // Niche quality sources
+  | "communities" // Communities & newsletters
+  | "fallback"; // Search fallbacks (bottom)
 
 export interface FeedPackResult {
   input: FeedPackInput;

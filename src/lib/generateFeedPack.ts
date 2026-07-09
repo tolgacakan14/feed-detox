@@ -1,15 +1,13 @@
+import { matchFeedSources } from "@/data/feedSources";
 import { matchCurated } from "@/data/curatedSources";
 import { analyzeTopics } from "@/lib/topicIntel";
 import {
   dedupeByUrl,
   extractDirectLinks,
   guardResults,
-  redditCommunitySearch,
   scoreResult,
   searchAction,
   searchProvider,
-  tiktokCreatorSearch,
-  youtubeChannelSearch,
 } from "@/lib/discovery";
 import { validateResults } from "@/lib/validateUrl";
 import type {
@@ -22,10 +20,10 @@ import type {
 
 /**
  * Feed Pack pipeline:
- * topic parsing → topic intelligence → discovery (curated + live search if
- * configured + generated search actions) → URL validation → guard → dedupe
- * → ranking → sectioned output. No step may invent links: every URL comes
- * from the curated database, a (future) search API, or a real search page.
+ * topic parsing → topic intelligence → discovery (demo direct signals +
+ * curated + optional live search) → validation → guard → grouping → ranking.
+ * Direct creator/content links lead; generated search pages appear only as a
+ * clearly-labelled fallback group at the bottom. Nothing is invented.
  */
 
 // ── Prompt parsing ─────────────────────────────────────────────────────────
@@ -79,26 +77,73 @@ function parsePrompt(prompt: string, pills: string[]) {
 
 const POLITICS_MUTES = ["politics", "siyaset", "gündem", "election"];
 
-function buildTrainingPlan(topic: string, mutes: string[]): DayPlanItem[] {
+function buildTrainingPlan(topic: string, lang: "en" | "tr"): DayPlanItem[] {
+  if (lang === "tr") {
+    return [
+      { day: 1, title: "Creator’ları takip et", description: `Top creators bölümünden ${topic} ile ilgili 5–10 hesabı follow et.` },
+      { day: 2, title: "Content’i izle & kaydet", description: "Popular content’lerden 2–3 tanesini sonuna kadar izle, beğendiğini kaydet." },
+      { day: 3, title: "Keyword’leri mute et", description: "Mute listesindeki düşük değerli keyword’leri sessize al." },
+      { day: 4, title: "Niche’e in", description: "Sadece viral değil, niche kaliteli source’larla etkileşime gir." },
+      { day: 5, title: "Community & newsletter", description: "Community’lere katıl, bir newsletter’a abone ol." },
+      { day: 6, title: "Temizlik yap", description: "5 düşük kaliteli source’u unfollow et, junk’a “ilgilenmiyorum” de." },
+      { day: 7, title: "Gözden geçir & tekrarla", description: "Feed’inde ne değişti bak, 2–3 gün aynı signal’ları tekrarla." },
+    ];
+  }
   return [
-    { day: 1, title: "Follow the good stuff", description: `Open the Follow links and follow 5–10 quality sources about ${topic}.` },
-    { day: 2, title: "Search & save", description: `Run the exact searches in this pack — watch fully and save what you like.` },
-    { day: 3, title: "Mute the noise", description: `Mute or avoid: ${mutes.slice(0, 4).join(", ")}.` },
-    { day: 4, title: "Go niche", description: "Engage with smaller creators you found, not only viral posts." },
-    { day: 5, title: "Join & subscribe", description: "Join the communities and newsletters — quality off-feed feeds your on-feed." },
+    { day: 1, title: "Follow the creators", description: `Open Top creators and follow 5–10 quality accounts about ${topic}.` },
+    { day: 2, title: "Watch & save content", description: "Finish 2–3 items from Popular content and save what you like." },
+    { day: 3, title: "Mute the keywords", description: "Mute the low-value keywords in the mute list." },
+    { day: 4, title: "Go niche", description: "Engage with niche quality sources, not only viral posts." },
+    { day: 5, title: "Join & subscribe", description: "Join the communities and subscribe to one newsletter." },
     { day: 6, title: "Clean house", description: "Unfollow 5 low-quality sources and hit “Not interested” on junk." },
-    { day: 7, title: "Review & repeat", description: "Check what changed, then repeat the searches for 2–3 days to lock it in." },
+    { day: 7, title: "Review & repeat", description: "Check what changed, then repeat the same signals for 2–3 days." },
   ];
 }
 
-// ── Section assembly ───────────────────────────────────────────────────────
+// ── Grouping & ranking ─────────────────────────────────────────────────────
 
-const SECTION_CAPS: Record<SectionKey, number> = { follow: 6, watch: 6, join: 5, search: 8 };
+const SECTION_CAPS: Record<SectionKey, number> = {
+  creators: 6,
+  content: 5,
+  fresh: 4,
+  niche: 4,
+  communities: 5,
+  fallback: 5,
+};
 
-function toSection(results: DiscoveryResult[], topics: string[], cap: number) {
-  return dedupeByUrl(results)
-    .sort((a, b) => scoreResult(b, topics) - scoreResult(a, topics))
-    .slice(0, cap);
+const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
+  creators: [],
+  content: [],
+  fresh: [],
+  niche: [],
+  communities: [],
+  fallback: [],
+});
+
+/** Place each item in exactly one section by what it does for the feed. */
+function groupResults(items: DiscoveryResult[], topics: string[]) {
+  const buckets = EMPTY();
+  for (const it of items) {
+    if (it.type === "search_action") buckets.fallback.push(it);
+    else if (it.type === "community" || it.type === "newsletter") buckets.communities.push(it);
+    else if (it.type === "creator" || it.type === "account" || it.type === "channel")
+      buckets.creators.push(it);
+    else if (it.freshness === "trending" || it.freshness === "new") buckets.fresh.push(it);
+    else if (
+      it.popularity === "niche" ||
+      it.type === "website" ||
+      it.type === "article" ||
+      it.engagementLabel === "Niche quality"
+    )
+      buckets.niche.push(it);
+    else buckets.content.push(it);
+  }
+  (Object.keys(buckets) as SectionKey[]).forEach((k) => {
+    buckets[k] = dedupeByUrl(buckets[k])
+      .sort((a, b) => scoreResult(b, topics) - scoreResult(a, topics))
+      .slice(0, SECTION_CAPS[k]);
+  });
+  return buckets;
 }
 
 // ── Main generator ─────────────────────────────────────────────────────────
@@ -109,16 +154,15 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
   const intel = analyzeTopics(topics);
   const t = intel.mainTopic;
 
-  // 1) Curated real destinations (network-validated, guard applies).
+  // 1) Demo direct signals (rich metadata) + curated real destinations.
+  const demo = matchFeedSources(topics);
   const curated: DiscoveryResult[] = matchCurated(topics).map((s, i) => ({
     ...s,
     isDirectLink: true,
     id: `curated-${i}-${s.title.toLowerCase().replace(/\W+/g, "-")}`,
   }));
 
-  // 2) Live search results, when a provider is configured (none yet).
-  // Raw hits are classified by extractDirectLinks — only recognizable
-  // profile/channel/video/community/site URLs survive.
+  // 2) Optional live search (no provider configured yet) → classified direct links.
   let searched: DiscoveryResult[] = [];
   if (searchProvider) {
     const settled = await Promise.allSettled(
@@ -130,103 +174,20 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
   }
 
   // Validate + guard everything that claims to be a real destination.
-  const realLinks = await validateResults(guardResults([...curated, ...searched]));
+  const realPool = await validateResults(guardResults([...demo, ...curated, ...searched]));
 
-  // 3) Search actions — always real platform search pages.
-  const queries = intel.searchQueries;
-  const q2 = queries[1] ?? t;
+  // 3) Search fallbacks — real platform search pages, shown only at the bottom.
+  const fallbacks: DiscoveryResult[] = [
+    searchAction("youtube", t, "Open and finish 2–3 results — watch time is YouTube's strongest signal."),
+    searchAction("x", t, "Follow 3–5 accounts here that post analysis, not outrage."),
+    searchAction("tiktok", t, "Watch a few results fully — your For You page updates within days."),
+    searchAction("reddit", intel.searchQueries[1] ?? t),
+  ];
 
-  // Follow: DIRECT LINKS ONLY — real accounts, channels, sites, newsletters.
-  // Discovery/search links are never allowed here; they live in Explore More.
-  const follow = toSection(
-    realLinks.filter(
-      (r) =>
-        r.isDirectLink &&
-        ["website", "newsletter", "account", "channel"].includes(r.type),
-    ),
-    topics,
-    SECTION_CAPS.follow,
-  );
-
-  const watch = toSection(
-    [
-      searchAction("youtube", queries[0] ?? t, "Full watches are YouTube's strongest signal — pick 2–3 videos and finish them."),
-      searchAction("youtube", q2),
-      searchAction(
-        "youtube",
-        `${t} shorts`,
-        "Short-form counts too — like a few Shorts to sync your mobile feed.",
-        `Best “${t}” Shorts`,
-      ),
-      youtubeChannelSearch(t),
-      ...(intel.platforms.includes("spotify") ? [searchAction("spotify", t)] : []),
-      ...realLinks.filter((r) => ["video", "channel"].includes(r.type)),
-    ],
-    topics,
-    SECTION_CAPS.watch,
-  );
-
-  const join = toSection(
-    [
-      redditCommunitySearch(t),
-      searchAction("newsletter", t, "One good newsletter keeps the topic flowing even while your feed relearns."),
-      ...realLinks.filter((r) => r.type === "community"),
-    ],
-    topics,
-    SECTION_CAPS.join,
-  );
-
-  const search = toSection(
-    [
-      searchAction("x", t, "Follow 3–5 accounts here that post analysis, not outrage."),
-      searchAction("instagram", t, "Follow 2–3 pages, then save a few posts — Explore updates fast."),
-      tiktokCreatorSearch(t),
-      searchAction("tiktok", t, "Watch a few results fully — your For You page updates within days."),
-      searchAction(
-        "web",
-        `${t} official site`,
-        "The official source anchors your feed — everything else builds on it.",
-        `Find the official ${t} site`,
-      ),
-      searchAction(
-        "web",
-        `best ${t} creators to follow`,
-        undefined,
-        `Discover top “${t}” creators`,
-      ),
-      searchAction("reddit", q2),
-      ...(queries[3] ? [searchAction("web", queries[3])] : []),
-    ],
-    topics,
-    SECTION_CAPS.search,
-  );
-
-  // Guard once more on the final assembly (belt and braces — it's cheap).
-  const followFinal = guardResults(follow);
-  let joinFinal = guardResults(join);
-
-  // Lead with real links: if Follow is thin, promote the strongest direct
-  // community/source links up so the pack's top section is never empty
-  // whenever we actually have real destinations for the topic.
-  if (followFinal.length < 3) {
-    const promoted = joinFinal
-      .filter((r) => r.isDirectLink)
-      .slice(0, 3 - followFinal.length);
-    if (promoted.length > 0) {
-      followFinal.push(...promoted);
-      joinFinal = joinFinal.filter((r) => !promoted.includes(r));
-    }
-  }
-
-  const sections: Record<SectionKey, DiscoveryResult[]> = {
-    follow: followFinal,
-    watch: guardResults(watch),
-    join: joinFinal,
-    search: guardResults(search),
-  };
+  const sections = groupResults([...realPool, ...fallbacks], topics);
 
   const all = Object.values(sections).flat();
-  const verifiedLinksCount = all.filter((r) => r.confidence !== "search_action").length;
+  const verifiedLinksCount = all.filter((r) => r.type !== "search_action").length;
   const searchActionsCount = all.length - verifiedLinksCount;
 
   const muteKeywords = Array.from(
@@ -239,8 +200,8 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
 
   const summary =
     input.uiLang === "tr"
-      ? `İşte “${t}” Feed Paketin — en iyi başlangıç noktaları, üreticiler, topluluklar ve keşif rotaları. Daha az gürültü, daha çok sinyal. Akışın akıllanmak üzere. 🧠`
-      : `Here's your “${t}” Feed Pack — best starting points, creators, communities, and discovery paths to train your algorithm. Less noise, more signal. Good rabbit holes only. 🧠`;
+      ? `“${t}” için en iyi creator, content ve community’ler — her biri feed’ine ne katıyorsa ona göre gruplandı.`
+      : `The best creators, content and communities for “${t}” — grouped by what each one does for your feed.`;
 
   return {
     input,
@@ -249,7 +210,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     summary,
     sections,
     muteKeywords,
-    trainingPlan: buildTrainingPlan(t, muteKeywords),
+    trainingPlan: buildTrainingPlan(t, input.uiLang),
     metadata: {
       verifiedLinksCount,
       searchActionsCount,

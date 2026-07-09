@@ -241,7 +241,9 @@ export function scoreResult(r: DiscoveryResult, topics: string[]): number {
 export function dedupeByUrl(results: DiscoveryResult[]): DiscoveryResult[] {
   const seen = new Set<string>();
   return results.filter((r) => {
-    const key = r.url.toLowerCase();
+    // Normalize trailing slash + query so demo and curated entries for the
+    // same destination (e.g. r/galatasaray vs r/galatasaray/) collapse.
+    const key = r.url.toLowerCase().replace(/\/+(\?|$)/, "$1").replace(/\/$/, "");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

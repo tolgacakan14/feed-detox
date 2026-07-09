@@ -16,7 +16,7 @@ const PLATFORM_DOMAINS: Record<Platform, string[]> = {
   tiktok: ["tiktok.com"],
   youtube: ["youtube.com", "youtu.be"],
   reddit: ["reddit.com"],
-  newsletter: ["substack.com"],
+  newsletter: [], // newsletters live on many domains (substack, beehiiv, own sites)
   spotify: ["open.spotify.com", "spotify.com"],
   web: [], // any https domain
 };
@@ -78,7 +78,9 @@ export async function validateResults(
   const checks = await Promise.allSettled(
     results.map(async (r) => {
       if (!isStructurallyValid(r)) return null;
-      if (r.confidence === "search_action") return r; // known-good search page
+      // Search pages and curated demo signals (real, stable URLs) skip the
+      // network check so the showcase always renders; still structurally guarded.
+      if (r.confidence === "search_action" || r.isDemo) return r;
       return (await checkUrl(r.url)) ? r : null;
     }),
   );
