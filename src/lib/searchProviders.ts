@@ -156,11 +156,18 @@ async function youtubeSearch(query: string, limit: number): Promise<SearchResult
         ? `https://www.youtube.com/channel/${item.id.channelId}`
         : null;
     if (!url) return [];
+    // Prefix the channel name onto the snippet — the ranking layer's topic
+    // centrality check reads title+snippet, so a channel that's clearly
+    // topic-focused (e.g. "Tifo Football") now counts as a relevance signal
+    // even when the video title itself doesn't repeat the topic.
+    const snippet = item.snippet.channelTitle
+      ? `${item.snippet.channelTitle} — ${item.snippet.description ?? ""}`
+      : item.snippet.description;
     return [
       {
         title: item.snippet.title,
         url,
-        snippet: item.snippet.description,
+        snippet,
         source: "youtube_api" as const,
       },
     ];

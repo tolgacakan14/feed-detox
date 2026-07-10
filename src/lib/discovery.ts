@@ -202,6 +202,74 @@ export function cleanTitle(raw: string): string {
   return t;
 }
 
+// Matches a bare platform name, and known generic page-title fallbacks the
+// platforms themselves serve when a profile/video has no real title (e.g.
+// TikTok's default og:title is literally "TikTok - Make Your Day").
+const GENERIC_TITLE = /^(instagram|tiktok|x|twitter|youtube)(\s*[-–]\s*make your day)?$/i;
+const TYPE_NOUN: Partial<Record<string, string>> = {
+  reel: "Reel",
+  post: "post",
+  video: "video",
+  short: "Short",
+  account: "profile",
+  channel: "channel",
+};
+
+/**
+ * When the cleaned title is too generic to be useful (search providers
+ * sometimes return just the platform name for Instagram/TikTok, which
+ * block most scraping), derive something meaningful — first from an @handle
+ * in the snippet, then the snippet's own first sentence, then an honest
+ * topic+type description. Never invents a name; only recombines real text
+ * we already have, or falls back to a plain factual label.
+ */
+function deriveTitle(
+  cleanedTitle: string,
+  snippet: string | undefined,
+  cls: UrlClass,
+  topic: string,
+  hasPrefix: boolean,
+): string {
+  if (cleanedTitle && cleanedTitle.length >= 4 && !GENERIC_TITLE.test(cleanedTitle)) {
+    return cleanedTitle;
+  }
+  const handleMatch = snippet?.match(/@([\w.]{2,30})/);
+  if (handleMatch) return `@${handleMatch[1]}`;
+  const firstSentence = snippet?.split(/[.!?\n]/)[0]?.trim();
+  if (firstSentence && firstSentence.length > 6 && firstSentence.length < 90) {
+    return cleanTitle(firstSentence);
+  }
+  // A prefix (e.g. "Instagram Reel: ") already states the content type, so
+  // don't also repeat the type noun in the fallback ("Instagram Reel: topic
+  // Reel" reads as a duplicate) — just the topic on its own.
+  if (hasPrefix) return cleanTitle(topic) || "this topic";
+  const noun = TYPE_NOUN[cls.type] ?? "result";
+  return `${topic} ${noun}`;
+}
+
+/** Platform + content-type specific "why it matters" — replaces the old
+ * one-size-fits-all "Found in live results…" line with copy that actually
+ * explains the algorithm-training mechanism for that item. */
+const WHY_IT_MATTERS: Partial<Record<string, string>> = {
+  "x:post": "Useful because it gives your X timeline official or team-related signals instead of rumor accounts.",
+  "x:account": "Following real accounts here shifts your X timeline away from rumor and outrage pages.",
+  "instagram:reel": "Good short-form visual signal for Reels and Explore around this topic.",
+  "instagram:post": "A real post signal — save it if it matches the topic to sharpen what Explore shows you.",
+  "instagram:account": "Following the source teaches Explore your real taste level for this topic.",
+  "tiktok:video": "Watch fully only if it matches the topic — completion is what retrains For You quickly.",
+  "tiktok:account": "Following steers your For You page toward this topic faster than one-off searches.",
+  "youtube:video": "Good for YouTube recommendation training — longer watch time is a stronger signal than a like.",
+  "youtube:short": "Shorts completion is a fast, strong signal for YouTube's Shorts shelf.",
+  "youtube:channel": "Subscribing anchors your recommendations on a real source for this topic.",
+};
+
+function inferExtractedWhyItMatters(platform: Platform, type: DiscoveryResult["type"]): string {
+  return (
+    WHY_IT_MATTERS[`${platform}:${type}`] ??
+    "A real, direct result — engage with it to teach your feed this is the good stuff."
+  );
+}
+
 /**
  * Convert raw search results into guarded, classified direct links.
  * `socialOnly` (default true for live extraction) drops generic websites —
@@ -213,13 +281,14 @@ export function extractDirectLinks(
   results: RawSearchResult[],
   origin: "api" | "web_search" = "web_search",
   socialOnly = true,
+  topic = "",
 ): DiscoveryResult[] {
   return results.flatMap((raw, index) => {
     const cls = classifyUrl(raw.url);
     if (!cls) return [];
     if (socialOnly && !SOCIAL_PLATFORMS.has(cls.platform)) return [];
     const prefix = TITLE_PREFIX[`${cls.platform}:${cls.type}`];
-    const base = cleanTitle(raw.title);
+    const base = deriveTitle(cleanTitle(raw.title), raw.snippet, cls, topic, Boolean(prefix));
     return [
       {
         id: `extracted-${raw.url.replace(/\W+/g, "-").slice(0, 60)}`,
@@ -238,7 +307,7 @@ export function extractDirectLinks(
             : index < 3
               ? "High-ranking search result"
               : "Direct search result",
-        whyItMatters: "Found in live results — engage with it to teach your feed this is the good stuff.",
+        whyItMatters: inferExtractedWhyItMatters(cls.platform, cls.type),
       },
     ];
   });
@@ -323,18 +392,72 @@ function socialTier(r: DiscoveryResult): number {
 }
 
 /**
- * final_score = 0.22 relevance + 0.20 social_tier + 0.13 authority
- *             + 0.13 link_validity + 0.12 freshness + 0.10 engagement
- *             + 0.10 training_value
- * Social content > social profiles > communities > websites > discovery.
- * Diversity is applied by capping per-platform counts during assembly.
+ * Topic centrality: is the topic actually the SUBJECT of this item, or just
+ * mentioned in passing (a hashtag among many, a snippet aside)? Title match
+ * is a much stronger signal than a snippet-only match — a video titled
+ * "Fenerbahçe destroys rivals" that only has "#Galatasaray" in its
+ * description is not a Galatasaray signal, even though the word appears.
  */
-export function scoreResult(r: DiscoveryResult, topics: string[]): number {
-  const hay = `${r.title} ${r.rawQuery ?? ""} ${r.snippet ?? ""}`.toLowerCase();
-  const relevance =
-    topics.length === 0
-      ? 0.5
-      : topics.filter((t) => hay.includes(t.toLowerCase())).length / topics.length;
+function topicCentrality(r: DiscoveryResult, topics: string[]): number {
+  if (topics.length === 0) return 0.5;
+  const title = r.title.toLowerCase();
+  const snippet = (r.snippet ?? "").toLowerCase();
+  const lowered = topics.map((t) => t.toLowerCase());
+  if (lowered.some((t) => title.includes(t))) return 1;
+  if (lowered.some((t) => snippet.includes(t))) return 0.35;
+  return 0.15;
+}
+
+const BETTING_PATTERN = /\b(bet|betting|bahis|odds?|stake|parlay|gambling|casino|kupon)\b/i;
+const RAGEBAIT_PATTERN =
+  /\b(shocking|you won'?t believe|scandal|exposed|drama|fight|beef|fake news|rumou?r|dedikodu|skandal)\b/i;
+
+/** Betting/gambling content is never useful for training a feed — dropped
+ * outright regardless of rank, not just demoted. */
+export function isBettingContent(r: DiscoveryResult): boolean {
+  return BETTING_PATTERN.test(`${r.title} ${r.snippet ?? ""}`);
+}
+
+/** Soft demotion (0-0.7) for ragebait language and hashtag-stuffed spam
+ * titles — pushed down in ranking, not hard-removed, since a topic-central
+ * result with one spam-adjacent word is still better than nothing. */
+function negativeQualityPenalty(r: DiscoveryResult): number {
+  const hay = `${r.title} ${r.snippet ?? ""}`;
+  let penalty = 0;
+  if (RAGEBAIT_PATTERN.test(hay)) penalty += 0.25;
+  const hashtagCount = (r.title.match(/#\w+/g) ?? []).length;
+  if (hashtagCount >= 5) penalty += 0.25; // hashtag-stuffed, spam-farm-style title
+  return Math.min(penalty, 0.6);
+}
+
+/**
+ * Demotes results whose title is clearly about a DIFFERENT, related entity
+ * (a rival club, a different tool, a different genre) rather than the
+ * user's actual topic — e.g. the topic appears only as a trailing hashtag
+ * while a sibling entity leads the title. `siblings` comes from
+ * topicIntel's getSiblingEntities(); empty for topics with no known
+ * category, in which case this is always 0.
+ */
+function competingEntityPenalty(r: DiscoveryResult, topics: string[], siblings: string[]): number {
+  if (siblings.length === 0) return 0;
+  const title = r.title.toLowerCase();
+  const topicInTitle = topics.some((t) => title.includes(t.toLowerCase()));
+  if (topicInTitle) return 0;
+  return siblings.some((s) => title.includes(s)) ? 0.4 : 0;
+}
+
+/**
+ * final_score = 0.25 centrality + 0.18 social_tier + 0.12 authority
+ *             + 0.10 link_validity + 0.10 freshness + 0.10 engagement
+ *             + 0.15 training_value
+ * then × (1 − competing_entity_penalty) × (1 − negative_quality_penalty).
+ * Topic centrality leads the formula — a perfectly "direct" result about
+ * the wrong subject should never outrank a slightly-less-direct result
+ * that's actually about the topic. `siblings` (optional) enables the
+ * rival/competing-entity check; omit for call sites without topic intel.
+ */
+export function scoreResult(r: DiscoveryResult, topics: string[], siblings: string[] = []): number {
+  const centrality = topicCentrality(r, topics);
   const direct = socialTier(r);
   const validity = CONFIDENCE_SCORE[r.confidence];
   const authority = SOURCE_SCORE[r.source];
@@ -350,15 +473,32 @@ export function scoreResult(r: DiscoveryResult, topics: string[]): number {
         ? Math.max(0.4, 1 - r.searchRank * 0.08)
         : 0.5;
   const trainingValue = r.type === "search_action" ? 0.9 : 0.7;
-  return (
-    0.22 * relevance +
-    0.2 * direct +
-    0.13 * authority +
-    0.13 * validity +
-    0.12 * freshness +
+  const base =
+    0.25 * centrality +
+    0.18 * direct +
+    0.12 * authority +
+    0.1 * validity +
+    0.1 * freshness +
     0.1 * engagement +
-    0.1 * trainingValue
-  );
+    0.15 * trainingValue;
+  const penalty = competingEntityPenalty(r, topics, siblings) + negativeQualityPenalty(r);
+  return base * Math.max(0.15, 1 - penalty);
+}
+
+/**
+ * Hard quality floor for live-extracted results: drops betting/gambling
+ * content outright (never useful for feed training, regardless of rank)
+ * and items where the topic doesn't appear anywhere in the visible text
+ * (title or snippet) — pure noise, not just a weak match. Everything else
+ * is a soft demotion handled by scoreResult, so a topic-central-but-not-
+ * perfect result still gets a fair chance to rank.
+ */
+export function filterLowQuality(results: DiscoveryResult[], topics: string[]): DiscoveryResult[] {
+  return results.filter((r) => {
+    if (isBettingContent(r)) return false;
+    if (topics.length > 0 && topicCentrality(r, topics) <= 0.15) return false;
+    return true;
+  });
 }
 
 export function dedupeByUrl(results: DiscoveryResult[]): DiscoveryResult[] {

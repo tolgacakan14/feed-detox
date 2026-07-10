@@ -1,9 +1,10 @@
 import { matchFeedSources } from "@/data/feedSources";
 import { matchCurated } from "@/data/curatedSources";
-import { analyzeTopics, type TopicIntel } from "@/lib/topicIntel";
+import { analyzeTopics, getSiblingEntities, type TopicIntel } from "@/lib/topicIntel";
 import {
   dedupeByUrl,
   extractDirectLinks,
+  filterLowQuality,
   finalizeFeedPackItem,
   guardResults,
   mergeExtracted,
@@ -154,7 +155,7 @@ const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
 /** Route each item to its own platform's section. Search/discovery pages
  * NEVER enter a platform section — they go to the low-priority discovery
  * bucket, so every platform card is a real, direct destination. */
-function groupResults(items: DiscoveryResult[], topics: string[]) {
+function groupResults(items: DiscoveryResult[], topics: string[], siblings: string[]) {
   const buckets = EMPTY();
   for (const it of items) {
     if (it.type === "search_action") buckets.discovery.push(it);
@@ -166,7 +167,7 @@ function groupResults(items: DiscoveryResult[], topics: string[]) {
   }
   (Object.keys(buckets) as SectionKey[]).forEach((k) => {
     buckets[k] = dedupeByUrl(buckets[k])
-      .sort((a, b) => scoreResult(b, topics) - scoreResult(a, topics))
+      .sort((a, b) => scoreResult(b, topics, siblings) - scoreResult(a, topics, siblings))
       .slice(0, SECTION_CAPS[k]);
   });
   return buckets;
@@ -284,6 +285,10 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
   const topics = parsed.topics.length > 0 ? parsed.topics : ["your interests"];
   const intel = analyzeTopics(topics);
   const t = intel.mainTopic;
+  // Other well-known entities in the same category (e.g. rival clubs) — used
+  // to demote results whose title is clearly about something else while the
+  // topic only shows up as a trailing hashtag.
+  const siblings = getSiblingEntities(topics);
 
   // 1) Demo direct signals (rich metadata) + curated real destinations.
   const demo = matchFeedSources(topics);
@@ -311,7 +316,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
       intel.platformQueries[p].slice(0, 2).forEach((query) => {
         calls.push(
           searchSocial(`${SITE_SCOPE[p]} ${query}`, p).then((hits) =>
-            extractDirectLinks(hits, "web_search"),
+            extractDirectLinks(hits, "web_search", true, t),
           ),
         );
       });
@@ -324,14 +329,20 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
           extractDirectLinks(
             hits,
             hits.some((h) => h.source === "youtube_api") ? "api" : "web_search",
+            true,
+            t,
           ),
         ),
       );
     });
 
     const settled = await Promise.allSettled(calls);
-    searched = mergeExtracted(
-      settled.map((r) => (r.status === "fulfilled" ? r.value : [])),
+    // Hard quality floor (drops betting content + zero-relevance noise)
+    // before scoring even sees these — the top-5 cut later should be
+    // choosing among genuinely useful items, not just the least-bad ones.
+    searched = filterLowQuality(
+      mergeExtracted(settled.map((r) => (r.status === "fulfilled" ? r.value : []))),
+      topics,
     );
   }
 
@@ -354,7 +365,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
   // platform. Verified Feed Pack quality fields (bestAction/noiseRisk/
   // nicheLevel/freshness defaults) are filled in per-bucket AFTER grouping,
   // so a defaulted value never leaks back into where an item gets placed.
-  const sections = groupResults(realPool, topics);
+  const sections = groupResults(realPool, topics, siblings);
   addPlatformDiscovery(sections, t, intel.platformQueries);
   sections.discovery = sections.discovery.slice(0, SECTION_CAPS.discovery);
 

@@ -383,3 +383,20 @@ export function analyzeTopics(topics: string[]): TopicIntel {
     muteHints: [...(defs[0]?.muteHints ?? []), ...GENERAL.muteHints].slice(0, 6),
   };
 }
+
+/**
+ * Other well-known entities in the same category as the topic (e.g. rival
+ * football clubs for a club topic) — reuses the existing keyword lists, no
+ * new data. The ranking layer uses this to demote results whose title is
+ * clearly about one of these instead of the actual topic (a Fenerbahçe
+ * video that only mentions "Galatasaray" as a hashtag, for example).
+ */
+export function getSiblingEntities(topics: string[]): string[] {
+  const haystack = topics.join(" ").toLowerCase();
+  const matched = TYPE_DEFS.find((def) => def.keywords.some((k) => haystack.includes(k)));
+  if (!matched) return [];
+  const wanted = topics.map((t) => t.toLowerCase());
+  return matched.keywords.filter(
+    (k) => k.length > 3 && !wanted.some((w) => w.includes(k) || k.includes(w)),
+  );
+}
