@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
@@ -11,6 +13,8 @@ import {
 import { samplePacks } from "@/data/samplePacks";
 import { encodeFeedPackInput } from "@/lib/generateFeedPack";
 import { Badge } from "@/components/ui/badge";
+import { useLang } from "@/lib/langContext";
+import { translations } from "@/lib/i18n";
 
 const PACK_ICON: Record<string, LucideIcon> = {
   galatasaray: Trophy,
@@ -21,6 +25,8 @@ const PACK_ICON: Record<string, LucideIcon> = {
 };
 
 export function SamplePacks({ limit }: { limit?: number }) {
+  const { lang } = useLang();
+  const t = translations[lang];
   const packs = limit ? samplePacks.slice(0, limit) : samplePacks;
 
   return (
@@ -46,7 +52,7 @@ export function SamplePacks({ limit }: { limit?: number }) {
             ))}
           </div>
           <span className="mt-auto inline-flex items-center gap-1.5 pt-1 text-sm font-semibold text-tealbrand dark:text-limepunch">
-            Open this pack
+            {t.openPack}
             <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </span>
         </Link>

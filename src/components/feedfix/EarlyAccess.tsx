@@ -4,8 +4,12 @@ import { useState } from "react";
 import { Check, Mail } from "lucide-react";
 import { saveEmailSignup } from "@/lib/emailCapture";
 import { trackEvent } from "@/lib/analytics";
+import { useLang } from "@/lib/langContext";
+import { translations } from "@/lib/i18n";
 
 export function EarlyAccess() {
+  const { lang } = useLang();
+  const t = translations[lang];
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "done">("idle");
 
@@ -25,16 +29,15 @@ export function EarlyAccess() {
           className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-white/15 blur-2xl"
         />
         <h2 className="text-balance font-heading text-2xl font-bold sm:text-3xl">
-          Get early access
+          {t.earlyTitle}
         </h2>
         <p className="mx-auto mt-3 max-w-md text-balance text-sm text-white/85">
-          Real-time creator ranking, verified profiles and weekly Feed Pack
-          refreshes are coming. Be first in line.
+          {t.earlyDesc}
         </p>
 
         {status === "done" ? (
           <p className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full bg-white/20 px-5 py-2.5 text-sm font-semibold backdrop-blur">
-            <Check className="size-4" /> You&apos;re on the list.
+            <Check className="size-4" /> {t.earlyDone}
           </p>
         ) : (
           <div className="mx-auto mt-6 flex max-w-md flex-col gap-2 sm:flex-row">
@@ -55,7 +58,7 @@ export function EarlyAccess() {
               onClick={submit}
               className="h-11 rounded-full bg-white px-6 text-sm font-bold text-tealbrand transition-transform hover:scale-105"
             >
-              Join the list
+              {t.earlyButton}
             </button>
           </div>
         )}

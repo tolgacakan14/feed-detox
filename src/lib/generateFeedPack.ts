@@ -1,6 +1,7 @@
 import { matchFeedSources } from "@/data/feedSources";
 import { matchCurated } from "@/data/curatedSources";
-import { analyzeTopics, getSiblingEntities, type TopicIntel } from "@/lib/topicIntel";
+import { analyzeTopics, type TopicIntel } from "@/lib/topicIntel";
+import { understandTopic, type TopicContext } from "@/lib/topicUnderstanding";
 import {
   dedupeByUrl,
   extractDirectLinks,
@@ -22,7 +23,29 @@ import type {
   FeedPackInput,
   FeedPackResult,
   SectionKey,
+  TrainablePlatform,
 } from "@/types";
+
+/** The 4 platforms the platform-selection UI offers. Empty/missing
+ * `selectedPlatforms` on the input defaults to all four. */
+const ALL_TRAINABLE_PLATFORMS: TrainablePlatform[] = ["x", "instagram", "tiktok", "youtube"];
+
+const PLATFORM_SHORT_NAME: Record<TrainablePlatform, string> = {
+  x: "X",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+};
+
+/** "X, Instagram and YouTube" / "X, Instagram ve YouTube" — always listed in
+ * the canonical x/instagram/tiktok/youtube order regardless of selection order. */
+function formatPlatformList(platforms: Set<TrainablePlatform>, lang: "en" | "tr"): string {
+  const names = ALL_TRAINABLE_PLATFORMS.filter((p) => platforms.has(p)).map((p) => PLATFORM_SHORT_NAME[p]);
+  if (names.length <= 1) return names.join("");
+  const last = names[names.length - 1];
+  const rest = names.slice(0, -1).join(", ");
+  return `${rest} ${lang === "tr" ? "ve" : "and"} ${last}`;
+}
 
 /**
  * Feed Pack pipeline:
@@ -138,10 +161,6 @@ const SECTION_CAPS: Record<SectionKey, number> = {
   discovery: 6, // last-resort search paths — never mixed into platform sections
 };
 
-/** A primary platform gets Discovery search paths added only when its
- * direct account/content coverage is this thin — and those paths live in
- * the separate "discovery" section, never among the platform's top cards. */
-const MIN_DIRECT_PER_PLATFORM = 3;
 
 const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
   x: [],
@@ -154,8 +173,10 @@ const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
 
 /** Route each item to its own platform's section. Search/discovery pages
  * NEVER enter a platform section — they go to the low-priority discovery
- * bucket, so every platform card is a real, direct destination. */
-function groupResults(items: DiscoveryResult[], topics: string[], siblings: string[]) {
+ * bucket, so every platform card is a real, direct destination. Ranking
+ * runs on the full TopicContext (related terms, negative terms, quality
+ * intent), so the top-5 cut is semantic, not keyword-based. */
+function groupResults(items: DiscoveryResult[], ctx: TopicContext) {
   const buckets = EMPTY();
   for (const it of items) {
     if (it.type === "search_action") buckets.discovery.push(it);
@@ -167,7 +188,11 @@ function groupResults(items: DiscoveryResult[], topics: string[], siblings: stri
   }
   (Object.keys(buckets) as SectionKey[]).forEach((k) => {
     buckets[k] = dedupeByUrl(buckets[k])
-      .sort((a, b) => scoreResult(b, topics, siblings) - scoreResult(a, topics, siblings))
+      .sort(
+        (a, b) =>
+          scoreResult(b, ctx.topics, ctx.avoidEntities, ctx) -
+          scoreResult(a, ctx.topics, ctx.avoidEntities, ctx),
+      )
       .slice(0, SECTION_CAPS[k]);
   });
   return buckets;
@@ -193,22 +218,23 @@ const DISCOVERY_REASON: Record<"x" | "instagram" | "tiktok" | "youtube", [string
 };
 
 /**
- * For each of the 4 primary platforms, add Discovery search paths when
- * direct coverage is thin — never invents accounts. Each platform gets its
- * OWN query strategy (from topicIntel's platformQueries), not the bare topic
- * reused everywhere: the primary query is creator/channel-scoped, and if the
- * platform has ZERO real accounts at all, a second query (a different
- * angle — official/analysis) is added so the user still has two real entry
- * points. Never more than 2 discovery items per platform.
+ * STRICT search-fallback rule: a selected platform gets Search fallback
+ * paths ONLY when it has ZERO direct results — if even one real creator/
+ * content link exists, no search link is shown for that platform. Fallbacks
+ * always live in the separate bottom "discovery" section, clearly labeled,
+ * never among a platform's top cards. Each empty platform gets two real,
+ * differently-angled in-app searches (from topicIntel's per-platform query
+ * strategies) — never an invented account.
  */
 function addPlatformDiscovery(
   buckets: Record<SectionKey, DiscoveryResult[]>,
   topic: string,
   platformQueries: TopicIntel["platformQueries"],
+  selectedPlatforms: Set<TrainablePlatform>,
 ): void {
   (["x", "instagram", "tiktok", "youtube"] as const).forEach((key) => {
-    const originalCount = buckets[key].length;
-    if (originalCount >= MIN_DIRECT_PER_PLATFORM) return;
+    if (!selectedPlatforms.has(key)) return;
+    if (buckets[key].length > 0) return; // direct results exist → no fallback
 
     const queries = platformQueries[key];
     const [primaryReason, secondaryReason] = DISCOVERY_REASON[key];
@@ -222,16 +248,10 @@ function addPlatformDiscovery(
         : key === "youtube"
           ? youtubeChannelSearch(topic)
           : searchAction(key, queries[0], primaryReason, titleFor(queries[0]));
-    // Discovery paths live in the low-priority discovery section — never
-    // among the platform's top cards.
     buckets.discovery.push(primary);
 
-    // Platform is completely empty — give a second, differently-angled
-    // discovery path instead of leaving the user with just one search.
-    if (originalCount === 0) {
-      const q2 = queries[2] ?? queries[1] ?? topic;
-      buckets.discovery.push(searchAction(key, q2, secondaryReason, titleFor(q2)));
-    }
+    const q2 = queries[2] ?? queries[1] ?? topic;
+    buckets.discovery.push(searchAction(key, q2, secondaryReason, titleFor(q2)));
   });
 }
 
@@ -282,13 +302,26 @@ const GENERIC_DIRECT_POOL: DiscoveryResult[] = [
 
 export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackResult> {
   const parsed = parsePrompt(input.prompt, input.pills);
-  const topics = parsed.topics.length > 0 ? parsed.topics : ["your interests"];
+  const rawTopics = parsed.topics.length > 0 ? parsed.topics : ["your interests"];
+
+  // Semantic topic understanding: normalized topic, category, related and
+  // negative vocabulary, quality/platform intent, entities to prioritize
+  // and avoid. Everything downstream (queries, ranking, filtering, card
+  // copy) reads this one context.
+  const ctx = understandTopic(rawTopics, input.prompt);
+  const topics = ctx.topics;
   const intel = analyzeTopics(topics);
   const t = intel.mainTopic;
-  // Other well-known entities in the same category (e.g. rival clubs) — used
-  // to demote results whose title is clearly about something else while the
-  // topic only shows up as a trailing hashtag.
-  const siblings = getSiblingEntities(topics);
+
+  // Platform selection precedence: explicit UI selection → platforms named
+  // in the prompt itself ("galatasaray youtube") → all four. Never empty.
+  const selectedPlatforms = new Set<TrainablePlatform>(
+    input.selectedPlatforms && input.selectedPlatforms.length > 0
+      ? input.selectedPlatforms
+      : ctx.platformIntent.length > 0
+        ? ctx.platformIntent
+        : ALL_TRAINABLE_PLATFORMS,
+  );
 
   // 1) Demo direct signals (rich metadata) + curated real destinations.
   const demo = matchFeedSources(topics);
@@ -313,28 +346,31 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
 
     const calls: Promise<DiscoveryResult[]>[] = [];
     (["x", "instagram", "tiktok"] as const).forEach((p) => {
+      if (!selectedPlatforms.has(p)) return; // skip unselected platforms — no wasted API quota
       intel.platformQueries[p].slice(0, 2).forEach((query) => {
         calls.push(
           searchSocial(`${SITE_SCOPE[p]} ${query}`, p).then((hits) =>
-            extractDirectLinks(hits, "web_search", true, t),
+            extractDirectLinks(hits, "web_search", true, ctx),
           ),
         );
       });
     });
     // YouTube goes through the Data API when keyed (real engagement-backed
     // results); otherwise the same site:-scoped web search.
-    intel.platformQueries.youtube.slice(0, 2).forEach((query) => {
-      calls.push(
-        searchSocial(query, "youtube").then((hits) =>
-          extractDirectLinks(
-            hits,
-            hits.some((h) => h.source === "youtube_api") ? "api" : "web_search",
-            true,
-            t,
+    if (selectedPlatforms.has("youtube")) {
+      intel.platformQueries.youtube.slice(0, 2).forEach((query) => {
+        calls.push(
+          searchSocial(query, "youtube").then((hits) =>
+            extractDirectLinks(
+              hits,
+              hits.some((h) => h.source === "youtube_api") ? "api" : "web_search",
+              true,
+              ctx,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      });
+    }
 
     const settled = await Promise.allSettled(calls);
     // Hard quality floor (drops betting content + zero-relevance noise)
@@ -343,6 +379,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     searched = filterLowQuality(
       mergeExtracted(settled.map((r) => (r.status === "fulfilled" ? r.value : []))),
       topics,
+      ctx,
     );
   }
 
@@ -359,14 +396,21 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     realPool = GENERIC_DIRECT_POOL;
   }
 
+  // Drop items for the 4 primary platforms the user didn't select — "more"
+  // (Reddit/website/newsletter) is unaffected, it isn't one of the four.
+  realPool = realPool.filter(
+    (r) => !ALL_TRAINABLE_PLATFORMS.includes(r.platform as TrainablePlatform) ||
+      selectedPlatforms.has(r.platform as TrainablePlatform),
+  );
+
   // Route every direct item to its own platform's section, then top up any
   // of the 4 primary platforms that came up thin with ONE honest Discovery
   // search path — never a fake account, and never more than one per
   // platform. Verified Feed Pack quality fields (bestAction/noiseRisk/
   // nicheLevel/freshness defaults) are filled in per-bucket AFTER grouping,
   // so a defaulted value never leaks back into where an item gets placed.
-  const sections = groupResults(realPool, topics, siblings);
-  addPlatformDiscovery(sections, t, intel.platformQueries);
+  const sections = groupResults(realPool, ctx);
+  addPlatformDiscovery(sections, t, intel.platformQueries, selectedPlatforms);
   sections.discovery = sections.discovery.slice(0, SECTION_CAPS.discovery);
 
   (Object.keys(sections) as SectionKey[]).forEach((k) => {
@@ -392,13 +436,14 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     ]),
   ).slice(0, 8);
 
+  const platformList = formatPlatformList(selectedPlatforms, input.uiLang);
   const summary = isGenericDiscovery
     ? input.uiLang === "tr"
-      ? `“${t}” henüz curated kaynak setimizde yok, o yüzden X, Instagram, TikTok ve YouTube için geniş kapsamlı direct source’lar getirdik. Bu konuya özel real-time source discovery ileride eklenebilir.`
-      : `“${t}” isn't in our curated set yet, so here are broad direct sources across X, Instagram, TikTok and YouTube to start with. Topic-specific real-time source discovery can be added later.`
+      ? `“${t}” henüz curated kaynak setimizde yok, o yüzden ${platformList} için geniş kapsamlı direct source’lar getirdik. Bu konuya özel real-time source discovery ileride eklenebilir.`
+      : `“${t}” isn't in our curated set yet, so here are broad direct sources across ${platformList} to start with. Topic-specific real-time source discovery can be added later.`
     : input.uiLang === "tr"
-      ? `“${t}” için X, Instagram, TikTok ve YouTube’unu eğitecek creator ve content’ler — platform platform gruplandı. Less noise, more signal.`
-      : `Here's your platform-by-platform plan for “${t}” — X, Instagram, TikTok and YouTube, each with direct creators and content to train that app's algorithm. Less noise, more signal.`;
+      ? `“${t}” için ${platformList} üzerinde algorithm’ini eğitecek creator ve content’ler — platform platform gruplandı. Less noise, more signal.`
+      : `Here's your training plan for “${t}” across ${platformList} — direct creators and content to train each app's algorithm. Less noise, more signal.`;
 
   // Self-describing, platform-first view of the same items — the shape API
   // consumers should read. `sections` stays for the existing UI.
@@ -452,7 +497,12 @@ export function decodeFeedPackInput(encoded: string): FeedPackInput | null {
     if (typeof parsed.prompt !== "string" || !Array.isArray(parsed.pills)) {
       return null;
     }
-    return { ...parsed, uiLang: parsed.uiLang === "tr" ? "tr" : "en" };
+    const selectedPlatforms = Array.isArray(parsed.selectedPlatforms)
+      ? parsed.selectedPlatforms.filter((p): p is TrainablePlatform =>
+          (ALL_TRAINABLE_PLATFORMS as string[]).includes(p),
+        )
+      : [];
+    return { ...parsed, uiLang: parsed.uiLang === "tr" ? "tr" : "en", selectedPlatforms };
   } catch {
     return null;
   }

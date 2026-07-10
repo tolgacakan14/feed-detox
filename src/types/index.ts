@@ -14,6 +14,10 @@ export type Platform =
 
 export type UiLang = "en" | "tr";
 
+/** The 4 platforms Feed Detox trains directly — the platform-selection UI
+ * only ever offers these, regardless of the broader Platform union above. */
+export type TrainablePlatform = "x" | "instagram" | "tiktok" | "youtube";
+
 /** Where a link came from. Every displayed URL MUST have one of these. */
 export type SourceOrigin = "api" | "web_search" | "curated" | "generated_search_url";
 
@@ -122,6 +126,9 @@ export interface FeedPackInput {
   prompt: string; // free text: "Galatasaray, less transfer drama"
   pills: string[]; // selected quick pills, by label
   uiLang: UiLang; // language chosen on the first screen
+  /** Platforms the user wants recommendations for. Empty/undefined means
+   * "no explicit choice" — the generator then defaults to all four. */
+  selectedPlatforms?: TrainablePlatform[];
 }
 
 export interface DayPlanItem {

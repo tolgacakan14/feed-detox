@@ -4,24 +4,35 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
 import { QuickPills } from "@/components/feedfix/QuickPills";
+import { PlatformSelector } from "@/components/feedfix/PlatformSelector";
 import { encodeFeedPackInput } from "@/lib/generateFeedPack";
 import { trackEvent } from "@/lib/analytics";
 import { translations } from "@/lib/i18n";
-import type { UiLang } from "@/types";
+import { useLang } from "@/lib/langContext";
+import type { TrainablePlatform } from "@/types";
+
+const ALL_PLATFORMS: TrainablePlatform[] = ["x", "instagram", "youtube", "tiktok"];
 
 export function ChatHero() {
   const router = useRouter();
-  const [lang, setLang] = useState<UiLang>("en");
+  const { lang, setLang } = useLang();
   const [prompt, setPrompt] = useState("");
   const [pills, setPills] = useState<string[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<TrainablePlatform[]>(ALL_PLATFORMS);
   const t = translations[lang];
 
   const canSubmit = prompt.trim().length > 0 || pills.length > 0;
 
+  function togglePlatform(platform: TrainablePlatform) {
+    setSelectedPlatforms((prev) =>
+      prev.includes(platform) ? prev.filter((p) => p !== platform) : [...prev, platform],
+    );
+  }
+
   function submit(overridePrompt?: string) {
     const finalPrompt = (overridePrompt ?? prompt).trim();
     if (!finalPrompt && pills.length === 0) return;
-    const input = { prompt: finalPrompt, pills, uiLang: lang };
+    const input = { prompt: finalPrompt, pills, uiLang: lang, selectedPlatforms };
     trackEvent("generate_pack", input);
     router.push(`/results?data=${encodeFeedPackInput(input)}`);
   }
@@ -105,6 +116,10 @@ export function ChatHero() {
               >
                 <ArrowUp className="size-4" />
               </button>
+            </div>
+
+            <div className="mt-4">
+              <PlatformSelector selected={selectedPlatforms} onToggle={togglePlatform} lang={lang} />
             </div>
 
             <div className="mt-4">

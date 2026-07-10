@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Compass, VolumeX } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Compass, Plus, VolumeX } from "lucide-react";
 import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
-import { PLATFORM_SHORT_LABELS } from "@/lib/platform";
+import { LangSync } from "@/components/feedfix/LangSync";
+import { PLATFORM_LABELS, PLATFORM_SHORT_LABELS } from "@/lib/platform";
+import { encodeFeedPackInput } from "@/lib/generateFeedPack";
 import {
   FIELD_LABEL,
   FRESHNESS_BADGE,
@@ -9,7 +11,14 @@ import {
   TYPE_BADGE,
   translations,
 } from "@/lib/i18n";
-import type { DiscoveryResult, FeedPackResult, NoiseRisk, Platform, SectionKey } from "@/types";
+import type {
+  DiscoveryResult,
+  FeedPackResult,
+  NoiseRisk,
+  Platform,
+  SectionKey,
+  TrainablePlatform,
+} from "@/types";
 
 /** The 4 primary sections map straight to a real platform icon/brand tile;
  * "more" (secondary sources) gets a plain compass, deliberately less bold. */
@@ -130,12 +139,24 @@ function ResultCard({
   );
 }
 
+const ALL_TRAINABLE: TrainablePlatform[] = ["x", "instagram", "youtube", "tiktok"];
+
 export function DetoxResult({ result }: { result: FeedPackResult }) {
   const lang = result.input.uiLang;
   const t = translations[lang];
 
+  // Platforms this pack was built for; the rest become elegant expansion
+  // buttons ("Also build this Feed Pack for: …") that regenerate the same
+  // topic with that platform added — pure query-state, no persistence.
+  const selected =
+    result.input.selectedPlatforms && result.input.selectedPlatforms.length > 0
+      ? result.input.selectedPlatforms
+      : ALL_TRAINABLE;
+  const unselected = ALL_TRAINABLE.filter((p) => !selected.includes(p));
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-12 sm:px-6 sm:py-16">
+      <LangSync lang={lang} />
       {/* Header panel */}
       <header className="fade-up glass-card rounded-3xl p-6 shadow-lg shadow-aqua/5 sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tealbrand dark:text-aqua">
@@ -159,6 +180,9 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
           if (items.length === 0) return null;
           const sectionPlatform = SECTION_PLATFORM[key];
           const isSecondary = key === "more" || key === "discovery";
+          const trainingActions = sectionPlatform
+            ? t.platformActions[sectionPlatform as TrainablePlatform]
+            : undefined;
           return (
             <section
               key={key}
@@ -190,6 +214,16 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
                   ) : null}
                 </div>
               </div>
+              {trainingActions ? (
+                <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 pl-[calc(2rem+0.625rem)] text-xs text-muted-foreground/80">
+                  {trainingActions.map((action) => (
+                    <li key={action} className="flex items-center gap-1.5">
+                      <span className="size-1 shrink-0 rounded-full bg-tealbrand dark:bg-limepunch" />
+                      {action}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <div className={`mt-4 grid gap-4 ${isSecondary ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                 {items.map((item) => (
                   <ResultCard
@@ -203,6 +237,29 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
             </section>
           );
         })}
+
+        {/* Expansion: build the same pack for the platforms not selected */}
+        {unselected.length > 0 ? (
+          <section className="fade-up rounded-2xl border border-dashed border-border bg-muted/20 p-5">
+            <h2 className="text-sm font-semibold text-muted-foreground">{t.alsoBuildTitle}</h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {unselected.map((p) => (
+                <Link
+                  key={p}
+                  href={`/results?data=${encodeFeedPackInput({
+                    ...result.input,
+                    selectedPlatforms: [...selected, p],
+                  })}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-2 text-sm font-medium text-muted-foreground backdrop-blur transition-all hover:-translate-y-0.5 hover:border-aqua/60 hover:text-foreground hover:shadow-md hover:shadow-aqua/20"
+                >
+                  <PlatformIcon platform={p} className="size-4" branded />
+                  {t.forPlatformLabel.replace("{p}", PLATFORM_LABELS[p])}
+                  <Plus className="size-3.5 opacity-60" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* Mute keywords */}
         {result.muteKeywords.length > 0 ? (

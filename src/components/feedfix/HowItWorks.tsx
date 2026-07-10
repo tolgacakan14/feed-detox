@@ -1,22 +1,20 @@
-import { ListChecks, MousePointerClick, PackageOpen } from "lucide-react";
+"use client";
+
+import { Compass, LayoutGrid, MousePointerClick, Sparkles } from "lucide-react";
+import { useLang } from "@/lib/langContext";
 import { translations } from "@/lib/i18n";
 
-const ICONS = [ListChecks, PackageOpen, MousePointerClick];
+const ICONS = [Sparkles, LayoutGrid, Compass, MousePointerClick];
 const GRADIENTS = [
   "from-tealbrand to-aqua",
   "from-coral to-tangerine",
   "from-limepunch to-emerald-500",
+  "from-tealdeep to-slate-700",
 ];
 
 export function HowItWorks() {
-  // Homepage marketing section renders in English (the EN/TR toggle drives the
-  // hero + Feed Pack flow, which carry language through to /results).
-  const t = translations.en;
-  const steps = [
-    { title: t.steps[0], description: t.steps[1] },
-    { title: t.steps[2], description: t.steps[3] },
-    { title: t.steps[4], description: t.steps[5] },
-  ];
+  const { lang } = useLang();
+  const t = translations[lang];
 
   return (
     <section id="how" className="border-y border-border/60 bg-muted/30">
@@ -33,12 +31,12 @@ export function HowItWorks() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-3">
-          {steps.map((step, index) => {
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {t.howSteps.map((step, index) => {
             const Icon = ICONS[index];
             return (
               <div
-                key={step.title}
+                key={step}
                 className="flex flex-col gap-3 rounded-2xl bg-card p-6 ring-1 ring-foreground/[0.08] transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-aqua/10"
               >
                 <div
@@ -47,10 +45,9 @@ export function HowItWorks() {
                   <Icon className="size-5" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Step {index + 1}
+                  {t.stepLabel} {index + 1}
                 </p>
-                <h3 className="font-heading text-base font-semibold">{step.title}</h3>
-                <p className="text-sm text-muted-foreground">{step.description}</p>
+                <p className="text-sm font-medium leading-6">{step}</p>
               </div>
             );
           })}

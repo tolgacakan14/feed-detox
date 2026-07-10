@@ -193,12 +193,22 @@ export async function searchSocial(
 ): Promise<SearchResult[]> {
   try {
     if (platform === "youtube") {
-      const yt = await youtubeSearch(query, limit);
-      if (yt.length > 0) return yt;
+      // Own try/catch: a YouTube API failure (quota exhausted, network)
+      // must fall through to web search, not kill the whole call.
+      try {
+        const yt = await youtubeSearch(query, limit);
+        if (yt.length > 0) return yt;
+      } catch {
+        // fall through to the web provider below
+      }
     }
     const provider = getWebProvider();
     if (!provider) return [];
-    return await provider.search(query, limit);
+    // The YouTube web fallback needs the same site:-scoping the other
+    // platforms get at the call site — otherwise results are random web
+    // pages the extractor throws away.
+    const scoped = platform === "youtube" ? `site:youtube.com ${query}` : query;
+    return await provider.search(scoped, limit);
   } catch {
     return []; // fail-soft — never block the pack on a provider hiccup
   }
