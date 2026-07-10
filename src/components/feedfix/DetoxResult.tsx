@@ -50,12 +50,10 @@ function DetailChip({ label, value, tone }: { label: string; value: string; tone
 function ResultCard({
   result,
   openLabel,
-  demoLabel,
   compact,
 }: {
   result: DiscoveryResult;
   openLabel: string;
-  demoLabel: string;
   /** Secondary sections (e.g. "more") render smaller so they stay secondary. */
   compact?: boolean;
 }) {
@@ -70,11 +68,6 @@ function ResultCard({
           {PLATFORM_SHORT_LABELS[result.platform]}
         </div>
         <div className="flex items-center gap-1.5">
-          {result.isDemo ? (
-            <span className="rounded-full bg-coral/10 px-2 py-0.5 text-[11px] font-medium text-coral">
-              {demoLabel}
-            </span>
-          ) : null}
           <span className="rounded-full bg-tealbrand/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-tealdeep dark:text-aqua">
             {result.platform === "tiktok" && result.type === "video"
               ? "TikTok"
@@ -157,13 +150,6 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
         <p className="mt-4 border-t border-foreground/10 pt-3 text-xs leading-5 text-muted-foreground/80">
           {t.directFallbackNote}
         </p>
-        {/* The "sample signals" caveat only applies when no live provider ran
-            — with real search/API results it would be false modesty. */}
-        {!result.metadata.sourcesUsed.some((s) => s === "web_search" || s === "api") ? (
-          <p className="mt-2 text-xs leading-5 text-muted-foreground/60">
-            {t.safetyNote}
-          </p>
-        ) : null}
       </header>
 
       {/* Sections */}
@@ -210,7 +196,6 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
                     key={item.id}
                     result={item}
                     openLabel={t.openLabel}
-                    demoLabel={t.demoTag}
                     compact={isSecondary}
                   />
                 ))}

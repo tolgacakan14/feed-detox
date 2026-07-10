@@ -37,8 +37,8 @@ export function Footer() {
 
       <div className="border-t border-border/60 py-4">
         <p className="mx-auto max-w-6xl px-4 text-xs text-muted-foreground sm:px-6">
-          © {new Date().getFullYear()} Feed Detox. Demo data only — not connected to any real social
-          platform accounts. Feed Detox does not access or modify your social media accounts.
+          © {new Date().getFullYear()} Feed Detox. We never connect to, access, or modify your
+          social media accounts — every link opens the real platform in your own browser.
         </p>
       </div>
     </footer>

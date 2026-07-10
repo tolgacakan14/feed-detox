@@ -25,7 +25,6 @@ export interface Dict {
   howEyebrow: string;
   // Result
   resultTitle: string;
-  safetyNote: string;
   directFallbackNote: string;
   sections: Record<SectionKey, { name: string; purpose: string }>;
   openLabel: string; // footer "Open" button — same for every card, every section
@@ -34,8 +33,6 @@ export interface Dict {
   another: string;
   // Explainer (positioning)
   explainer: string;
-  // Card labels
-  demoTag: string;
 }
 
 const SHARED_SECTION_ORDER: SectionKey[] = ["x", "instagram", "tiktok", "youtube", "more", "discovery"];
@@ -63,8 +60,6 @@ export const translations: Record<UiLang, Dict> = {
       "Your engagement is the signal. We just point it at better sources.",
     ],
     resultTitle: "Your Feed Pack is ready.",
-    safetyNote:
-      "Demo MVP: recommendations are sample signals. Real-time creator/content ranking can be added with search/API integrations.",
     directFallbackNote:
       "Feed Detox prioritizes direct accounts, creators and content on each platform — search links appear as Discovery only when direct coverage is thin.",
     sections: {
@@ -81,7 +76,6 @@ export const translations: Record<UiLang, Dict> = {
     another: "Build another Feed Pack",
     explainer:
       "Feed Detox works by improving the signals you give your platforms. Follow better creators, watch higher-quality content, save useful posts, and mute low-value topics.",
-    demoTag: "Demo signal",
   },
   tr: {
     headline1: "Feed’ini",
@@ -105,8 +99,6 @@ export const translations: Record<UiLang, Dict> = {
       "Etkileşimin signal’dır. Biz onu daha iyi source’lara yönlendiririz.",
     ],
     resultTitle: "Feed Pack’in hazır.",
-    safetyNote:
-      "Demo MVP: öneriler şimdilik sample signal’lardır. Real-time creator/content ranking ileride search/API entegrasyonlarıyla eklenebilir.",
     directFallbackNote:
       "Feed Detox her platformda önce direct account ve creator önerir — search link’leri sadece direct kaynak azsa Discovery olarak görünür.",
     sections: {
@@ -123,7 +115,6 @@ export const translations: Record<UiLang, Dict> = {
     another: "Yeni Feed Pack oluştur",
     explainer:
       "Feed Detox, platformlara verdiğin signal’ları iyileştirerek çalışır. Daha iyi creator’ları takip et, kaliteli content’leri izle/kaydet ve düşük değerli keyword’leri mute et.",
-    demoTag: "Demo signal",
   },
 };
 
