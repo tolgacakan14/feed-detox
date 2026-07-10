@@ -88,7 +88,7 @@ const DEMO: Demo[] = [
 
   // ── Football analysis (EN/mixed) ──────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "Tifo Football",
+    platform: "youtube", type: "channel", title: "Tifo Football",
     creatorName: "Tifo Football", handle: "@tifofootball",
     url: "https://www.youtube.com/@tifofootball", category: "Football analysis", language: "en",
     popularity: "global", freshness: "evergreen", engagement: "Popular",
@@ -132,7 +132,7 @@ const DEMO: Demo[] = [
 
   // ── AI tools (EN) ─────────────────────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "Two Minute Papers",
+    platform: "youtube", type: "channel", title: "Two Minute Papers",
     creatorName: "Two Minute Papers", handle: "@TwoMinutePapers",
     url: "https://www.youtube.com/@TwoMinutePapers", category: "AI tools", language: "en",
     popularity: "global", freshness: "trending", engagement: "Popular",
@@ -176,7 +176,7 @@ const DEMO: Demo[] = [
 
   // ── Music discovery (EN) ──────────────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "NPR Music (Tiny Desk)",
+    platform: "youtube", type: "channel", title: "NPR Music (Tiny Desk)",
     creatorName: "NPR Music", handle: "@nprmusic",
     url: "https://www.youtube.com/@nprmusic", category: "Music discovery", language: "en",
     popularity: "global", freshness: "evergreen", engagement: "Popular",
@@ -223,7 +223,7 @@ const DEMO: Demo[] = [
 
   // ── No-politics clean feed (EN) ───────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "Kurzgesagt",
+    platform: "youtube", type: "channel", title: "Kurzgesagt",
     creatorName: "Kurzgesagt – In a Nutshell", handle: "@kurzgesagt",
     url: "https://www.youtube.com/@kurzgesagt", category: "No-politics clean feed", language: "en",
     popularity: "global", freshness: "evergreen", engagement: "Popular",
@@ -242,7 +242,7 @@ const DEMO: Demo[] = [
 
   // ── Turkish content (TR) ──────────────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "Barış Özcan",
+    platform: "youtube", type: "channel", title: "Barış Özcan",
     creatorName: "Barış Özcan", handle: "@BarisOzcan",
     url: "https://www.youtube.com/@BarisOzcan", category: "Turkish content", language: "tr",
     popularity: "global", freshness: "evergreen", engagement: "Popular",
@@ -259,7 +259,7 @@ const DEMO: Demo[] = [
     reason: "Reading local tech sources rebalances your feed toward real signal.",
   },
   {
-    platform: "youtube", type: "video", title: "Ruhi Çenet",
+    platform: "youtube", type: "channel", title: "Ruhi Çenet",
     creatorName: "Ruhi Çenet", handle: "@RuhiCenet",
     url: "https://www.youtube.com/@RuhiCenet", category: "Turkish content", language: "tr",
     popularity: "global", freshness: "trending", engagement: "High engagement",
@@ -268,7 +268,7 @@ const DEMO: Demo[] = [
     reason: "A high-quality Turkish creator crowds out low-effort viral clips.",
   },
   {
-    platform: "youtube", type: "video", title: "Fenomen Bilim",
+    platform: "youtube", type: "channel", title: "Fenomen Bilim",
     creatorName: "Fenomen Bilim", handle: "@FenomenBilim",
     url: "https://www.youtube.com/@FenomenBilim", category: "Turkish content", language: "tr",
     popularity: "niche", freshness: "evergreen", engagement: "Popular",
@@ -311,7 +311,7 @@ const DEMO: Demo[] = [
 
   // ── English content (EN, broad quality creators/publications) ─────
   {
-    platform: "youtube", type: "video", title: "Veritasium",
+    platform: "youtube", type: "channel", title: "Veritasium",
     creatorName: "Veritasium", handle: "@veritasium",
     url: "https://www.youtube.com/@veritasium", category: "English content", language: "en",
     popularity: "global", freshness: "trending", engagement: "High engagement",
@@ -320,7 +320,7 @@ const DEMO: Demo[] = [
     reason: "Full watches here teach YouTube you want depth over clickbait.",
   },
   {
-    platform: "youtube", type: "video", title: "CGP Grey",
+    platform: "youtube", type: "channel", title: "CGP Grey",
     creatorName: "CGP Grey", handle: "@CGPGrey",
     url: "https://www.youtube.com/@CGPGrey", category: "English content", language: "en",
     popularity: "global", freshness: "evergreen", engagement: "Popular",
@@ -329,7 +329,7 @@ const DEMO: Demo[] = [
     reason: "Dense, well-researched videos raise the bar for what your feed considers watchable.",
   },
   {
-    platform: "youtube", type: "video", title: "Wendover Productions",
+    platform: "youtube", type: "channel", title: "Wendover Productions",
     creatorName: "Wendover Productions", handle: "@Wendoverproductions",
     url: "https://www.youtube.com/@Wendoverproductions", category: "English content", language: "en",
     popularity: "niche", freshness: "trending", engagement: "Rising",
@@ -354,7 +354,7 @@ const DEMO: Demo[] = [
     reason: "Subscribing keeps sharp writing in your loop, off the feed entirely.",
   },
   {
-    platform: "youtube", type: "video", title: "TED",
+    platform: "youtube", type: "channel", title: "TED",
     creatorName: "TED", handle: "@TED",
     url: "https://www.youtube.com/@TED", category: "English content", language: "en",
     popularity: "global", freshness: "evergreen", engagement: "High engagement",
@@ -437,7 +437,7 @@ const DEMO: Demo[] = [
     reason: "Hard data recalibrates your feed away from salary clickbait.",
   },
   {
-    platform: "youtube", type: "video", title: "Ali Abdaal",
+    platform: "youtube", type: "channel", title: "Ali Abdaal",
     creatorName: "Ali Abdaal", handle: "@AliAbdaal",
     url: "https://www.youtube.com/@AliAbdaal", category: "Career", language: "en",
     popularity: "global", freshness: "trending", engagement: "High engagement",
@@ -473,7 +473,7 @@ const DEMO: Demo[] = [
     official: true,
   },
   {
-    platform: "youtube", type: "video", title: "Y Combinator (YouTube)",
+    platform: "youtube", type: "channel", title: "Y Combinator (YouTube)",
     creatorName: "Y Combinator", handle: "@ycombinator",
     url: "https://www.youtube.com/@ycombinator", category: "Startup & founder", language: "en",
     popularity: "global", freshness: "trending", engagement: "High engagement",
@@ -541,7 +541,7 @@ const DEMO: Demo[] = [
     reason: "Wonder-driven content is the opposite of engagement-farmed outrage.",
   },
   {
-    platform: "youtube", type: "video", title: "Vsauce",
+    platform: "youtube", type: "channel", title: "Vsauce",
     creatorName: "Vsauce", handle: "@Vsauce",
     url: "https://www.youtube.com/@Vsauce", category: "No-politics clean feed", language: "en",
     popularity: "global", freshness: "evergreen", engagement: "Popular",
@@ -602,7 +602,7 @@ const DEMO: Demo[] = [
 
   // ── Music discovery (top-up) ────────────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "Rick Beato",
+    platform: "youtube", type: "channel", title: "Rick Beato",
     creatorName: "Rick Beato", handle: "@RickBeato",
     url: "https://www.youtube.com/@RickBeato", category: "Music discovery", language: "en",
     popularity: "global", freshness: "trending", engagement: "High engagement",
@@ -655,7 +655,7 @@ const DEMO: Demo[] = [
 
   // ── AI tools (top-up) ────────────────────────────────────────────────
   {
-    platform: "youtube", type: "video", title: "Andrej Karpathy",
+    platform: "youtube", type: "channel", title: "Andrej Karpathy",
     creatorName: "Andrej Karpathy", handle: "@AndrejKarpathy",
     url: "https://www.youtube.com/@AndrejKarpathy", category: "AI tools", language: "en",
     popularity: "niche", freshness: "trending", engagement: "High engagement",

@@ -20,22 +20,19 @@ import { isStructurallyValid } from "@/lib/validateUrl";
  * with source "api" | "web_search" so the guard and ranking apply unchanged.
  */
 
-/** Returns raw search hits; the pipeline classifies and extracts direct
- * links from them via extractDirectLinks. Plug Tavily/Serper/YouTube API in
- * here (Stage 2). */
-export type SearchProvider = (
-  query: string,
-) => Promise<{ title: string; url: string; snippet?: string }[]>;
-
-/** No live search API configured yet — curated + discovery links carry the pack. */
-export const searchProvider: SearchProvider | null = null;
+// Live search is provided by lib/searchProviders (env-keyed: YouTube Data
+// API, Tavily, SerpAPI, Bing, Google CSE). This module classifies/extracts
+// whatever those providers return — only recognizable direct social URLs
+// survive into the pack.
 
 // ── Search-action builders (real, always-working search pages) ─────────────
 
 const q = encodeURIComponent;
 
 const SEARCH_BUILDERS: Partial<Record<Platform, (query: string) => string>> = {
-  x: (query) => `https://x.com/search?q=${q(query)}&src=typed_query&f=user`,
+  // "Top" tab, not People (f=user) — People search on a quoted generic
+  // phrase routinely returns "No results", which is a dead end for the user.
+  x: (query) => `https://x.com/search?q=${q(query)}&src=typed_query`,
   instagram: (query) =>
     `https://www.instagram.com/explore/search/keyword/?q=${q(query)}`,
   tiktok: (query) => `https://www.tiktok.com/search?q=${q(query)}`,
@@ -130,18 +127,24 @@ interface UrlClass {
   type: DiscoveryResult["type"];
 }
 
+// Most specific first — a status/reel/video URL must not be classified as a
+// bare account by a looser pattern.
 const DIRECT_URL_PATTERNS: [RegExp, UrlClass][] = [
+  [/^https:\/\/(www\.)?(x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/\d+/i, { platform: "x", type: "post" }],
   [/^https:\/\/(www\.)?(x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/?$/i, { platform: "x", type: "account" }],
-  [/^https:\/\/(www\.)?youtube\.com\/(@[\w.-]+|channel\/[\w-]+|c\/[\w-]+|user\/[\w-]+)\/?$/i, { platform: "youtube", type: "channel" }],
+  [/^https:\/\/(www\.)?youtube\.com\/shorts\/[\w-]+/i, { platform: "youtube", type: "short" }],
   [/^https:\/\/(www\.)?youtube\.com\/watch\?v=[\w-]+/i, { platform: "youtube", type: "video" }],
-  [/^https:\/\/(www\.)?youtube\.com\/shorts\/[\w-]+/i, { platform: "youtube", type: "video" }],
+  [/^https:\/\/(www\.)?youtube\.com\/(@[\w.-]+|channel\/[\w-]+|c\/[\w-]+|user\/[\w-]+)\/?$/i, { platform: "youtube", type: "channel" }],
+  [/^https:\/\/(www\.)?instagram\.com\/reel\/[\w-]+\/?/i, { platform: "instagram", type: "reel" }],
+  [/^https:\/\/(www\.)?instagram\.com\/p\/[\w-]+\/?/i, { platform: "instagram", type: "post" }],
   [/^https:\/\/(www\.)?instagram\.com\/[\w.]{2,30}\/?$/i, { platform: "instagram", type: "account" }],
+  [/^https:\/\/(www\.)?tiktok\.com\/@[\w.]+\/video\/\d+/i, { platform: "tiktok", type: "video" }],
   [/^https:\/\/(www\.)?tiktok\.com\/@[\w.]+\/?$/i, { platform: "tiktok", type: "account" }],
   [/^https:\/\/(www\.)?reddit\.com\/r\/\w+\/?$/i, { platform: "reddit", type: "community" }],
   [/^https:\/\/[\w-]+\.substack\.com\/?$/i, { platform: "newsletter", type: "newsletter" }],
 ];
 
-const NON_DIRECT_PATH = /search|login|signin|signup|explore\/tags|hashtag|\/results/i;
+const NON_DIRECT_PATH = /\/search|\/login|signin|signup|\/accounts\/|explore\/tags|hashtag|\/results|\/discover\b/i;
 const PLATFORM_HOMEPAGES =
   /^https:\/\/(www\.)?(x|twitter|youtube|instagram|tiktok|reddit|substack)\.com\/?$/i;
 
@@ -168,18 +171,59 @@ export function classifyUrl(url: string): (UrlClass & { isDirectLink: true }) | 
   return null;
 }
 
-/** Convert raw search results into guarded, classified direct links. */
+const SOCIAL_PLATFORMS = new Set(["x", "instagram", "tiktok", "youtube"]);
+
+/** Platform-aware title prefixes for extracted content items — makes a raw
+ * search title immediately legible as "what am I about to open?". */
+const TITLE_PREFIX: Partial<Record<string, string>> = {
+  "youtube:video": "YouTube video",
+  "youtube:short": "YouTube Short",
+  "youtube:channel": "YouTube channel",
+  "instagram:reel": "Instagram Reel",
+  "instagram:post": "Instagram post",
+  "tiktok:video": "TikTok video",
+  "x:post": "X post",
+};
+
+/** Clean raw search-result titles: strip site suffixes providers append and
+ * fix all-lowercase first letters. Never invents content — cosmetic only. */
+export function cleanTitle(raw: string): string {
+  let t = raw
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/\s*[-|–]\s*(YouTube|TikTok|Instagram|X|Twitter)\s*$/i, "")
+    .replace(/\s*\/\s*(Posts\s*\/\s*)?(X|Twitter)\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (t && t[0] === t[0].toLowerCase() && /[a-z]/.test(t[0])) {
+    t = t[0].toUpperCase() + t.slice(1);
+  }
+  return t;
+}
+
+/**
+ * Convert raw search results into guarded, classified direct links.
+ * `socialOnly` (default true for live extraction) drops generic websites —
+ * the live pipeline exists to find SOCIAL accounts/content, not random
+ * blogs. Search rank is recorded as a ranking input; results that appear
+ * across multiple queries get merged and boosted by mergeExtracted().
+ */
 export function extractDirectLinks(
   results: RawSearchResult[],
   origin: "api" | "web_search" = "web_search",
+  socialOnly = true,
 ): DiscoveryResult[] {
-  return results.flatMap((raw) => {
+  return results.flatMap((raw, index) => {
     const cls = classifyUrl(raw.url);
     if (!cls) return [];
+    if (socialOnly && !SOCIAL_PLATFORMS.has(cls.platform)) return [];
+    const prefix = TITLE_PREFIX[`${cls.platform}:${cls.type}`];
+    const base = cleanTitle(raw.title);
     return [
       {
         id: `extracted-${raw.url.replace(/\W+/g, "-").slice(0, 60)}`,
-        title: raw.title,
+        title: prefix ? `${prefix}: ${base}` : base,
         url: raw.url,
         platform: cls.platform,
         type: cls.type,
@@ -187,10 +231,42 @@ export function extractDirectLinks(
         confidence: "verified" as const,
         isDirectLink: true,
         snippet: raw.snippet,
+        searchRank: index,
+        popularitySignal:
+          origin === "api"
+            ? "YouTube API result"
+            : index < 3
+              ? "High-ranking search result"
+              : "Direct search result",
         whyItMatters: "Found in live results — engage with it to teach your feed this is the good stuff.",
       },
     ];
   });
+}
+
+/**
+ * Merge extracted links from multiple queries: a URL that shows up in more
+ * than one search is a real popularity signal (never a fabricated metric) —
+ * it keeps its best rank and gets the cross-search popularitySignal.
+ */
+export function mergeExtracted(batches: DiscoveryResult[][]): DiscoveryResult[] {
+  const byUrl = new Map<string, { item: DiscoveryResult; hits: number }>();
+  for (const batch of batches) {
+    for (const item of batch) {
+      const key = item.url.toLowerCase().replace(/\/$/, "");
+      const existing = byUrl.get(key);
+      if (!existing) byUrl.set(key, { item, hits: 1 });
+      else {
+        existing.hits += 1;
+        if ((item.searchRank ?? 99) < (existing.item.searchRank ?? 99)) existing.item = item;
+      }
+    }
+  }
+  return [...byUrl.values()].map(({ item, hits }) =>
+    hits > 1
+      ? { ...item, popularitySignal: "Appears across multiple social searches" }
+      : item,
+  );
 }
 
 // ── Anti-hallucination guard ───────────────────────────────────────────────
@@ -232,12 +308,26 @@ const ENGAGEMENT_SCORE: Record<string, number> = {
 };
 
 /**
- * final_score = 0.22 relevance + 0.20 direct_link_quality + 0.13 authority
+ * Social-first ranking tier — the product trains social algorithms, so
+ * direct social CONTENT (a post/Reel/TikTok/Short the user can watch right
+ * now) outranks profiles, profiles outrank communities, and generic
+ * websites sit below all social results. Discovery/search links last.
+ */
+function socialTier(r: DiscoveryResult): number {
+  if (r.type === "search_action") return 0.2;
+  const social = SOCIAL_PLATFORMS.has(r.platform);
+  if (social && ["post", "reel", "short", "video"].includes(r.type)) return 1;
+  if (social) return 0.85; // creator/account/channel
+  if (r.type === "community") return 0.6;
+  return 0.4; // website/newsletter/article — supporting sources
+}
+
+/**
+ * final_score = 0.22 relevance + 0.20 social_tier + 0.13 authority
  *             + 0.13 link_validity + 0.12 freshness + 0.10 engagement
  *             + 0.10 training_value
- * Direct links always outrank discovery links within a section; trending/new
- * and higher-engagement items rise within that. Diversity is applied by
- * capping per-platform counts during assembly.
+ * Social content > social profiles > communities > websites > discovery.
+ * Diversity is applied by capping per-platform counts during assembly.
  */
 export function scoreResult(r: DiscoveryResult, topics: string[]): number {
   const hay = `${r.title} ${r.rawQuery ?? ""} ${r.snippet ?? ""}`.toLowerCase();
@@ -245,11 +335,20 @@ export function scoreResult(r: DiscoveryResult, topics: string[]): number {
     topics.length === 0
       ? 0.5
       : topics.filter((t) => hay.includes(t.toLowerCase())).length / topics.length;
-  const direct = r.isDirectLink ? 1 : 0.35;
+  const direct = socialTier(r);
   const validity = CONFIDENCE_SCORE[r.confidence];
   const authority = SOURCE_SCORE[r.source];
   const freshness = r.freshness ? FRESHNESS_SCORE[r.freshness] : 0.5;
-  const engagement = r.engagementLabel ? (ENGAGEMENT_SCORE[r.engagementLabel] ?? 0.5) : 0.5;
+  // Real popularity inputs when available: curated engagement labels, or for
+  // live-extracted results, search rank + cross-search repetition. Never a
+  // fabricated number — just ordering evidence we actually have.
+  const engagement = r.engagementLabel
+    ? (ENGAGEMENT_SCORE[r.engagementLabel] ?? 0.5)
+    : r.popularitySignal === "Appears across multiple social searches"
+      ? 0.9
+      : r.searchRank !== undefined
+        ? Math.max(0.4, 1 - r.searchRank * 0.08)
+        : 0.5;
   const trainingValue = r.type === "search_action" ? 0.9 : 0.7;
   return (
     0.22 * relevance +
@@ -281,26 +380,69 @@ export function dedupeByUrl(results: DiscoveryResult[]): DiscoveryResult[] {
 // assignment rules" a human curator would apply. Never invents numbers
 // (follower counts, engagement %) — only qualitative labels.
 
-/** What should the user actually DO with this result? */
+/**
+ * What should the user actually DO with this result? Platform-aware per
+ * product rule — X/Instagram/TikTok/YouTube each train their algorithm
+ * differently, so the action verb and description change per platform, not
+ * just per content type.
+ */
 export function inferBestAction(item: DiscoveryResult): BestAction {
+  // Discovery/search paths — platform-flavored "Explore" framing.
   if (item.type === "search_action") {
-    return { label: "Explore", description: "Explore this discovery path and open the strongest profiles." };
+    if (item.platform === "x") {
+      return { label: "Explore", description: "Explore this search, then follow 3–5 real accounts and bookmark the good threads." };
+    }
+    if (item.platform === "instagram") {
+      return { label: "Explore", description: "Explore this search, follow the strongest pages, and watch a few Reels fully." };
+    }
+    if (item.platform === "tiktok") {
+      return { label: "Explore", description: "Explore this search and watch 3–5 videos fully — that's what retrains your For You page." };
+    }
+    if (item.platform === "youtube") {
+      return { label: "Explore", description: "Explore this search and watch one full video or Short to start." };
+    }
+    return { label: "Explore", description: "Explore this discovery path and open the strongest results." };
   }
+
   if (item.type === "community") {
     return { label: "Join", description: "Join and read a few threads before you post." };
   }
   if (item.type === "newsletter") {
     return { label: "Subscribe", description: "Subscribe to keep quality input flowing even while your feed relearns." };
   }
-  if (item.type === "video") {
-    return { label: "Watch", description: "Watch one full video to teach the platform your real interest." };
-  }
   if (item.type === "website" || item.type === "article") {
     return { label: "Read", description: "Read through once — bookmark it if it earns a repeat visit." };
   }
-  // creator / account / channel
+
+  // Direct content items — the click IS the training signal.
+  if (item.type === "post") {
+    return { label: "Bookmark", description: "Read the thread, bookmark it, and follow the author if it holds up." };
+  }
+  if (item.type === "reel") {
+    return { label: "Watch", description: "Watch the Reel fully and save it — Explore updates fast on saves." };
+  }
+  if (item.type === "short") {
+    return { label: "Watch", description: "Watch the Short fully — completion is YouTube's strongest Shorts signal." };
+  }
+  if (item.platform === "tiktok" && item.type === "video") {
+    return { label: "Watch", description: "Watch fully and save it — completion rate retrains your For You page." };
+  }
+
+  // Direct accounts, channels, videos — platform-specific training actions.
+  if (item.platform === "x") {
+    return { label: "Follow", description: "Follow, add to a private list, and bookmark useful threads. Mute noisy keywords, avoid ragebait replies." };
+  }
+  if (item.platform === "instagram") {
+    return { label: "Follow", description: "Follow, then watch Reels fully and save the good posts. Tap Not Interested on spam." };
+  }
+  if (item.platform === "tiktok") {
+    return { label: "Watch", description: "Watch 3–5 videos fully, save the good ones, and long-press Not Interested on the rest." };
+  }
   if (item.platform === "youtube") {
-    return { label: "Subscribe", description: "Subscribe, then watch one full video to start." };
+    if (item.type === "video") {
+      return { label: "Watch", description: "Watch the full video — that's YouTube's strongest signal. Save it to a playlist if it's a keeper." };
+    }
+    return { label: "Subscribe", description: "Subscribe, then watch one full video or Short to start training your recommendations." };
   }
   return { label: "Follow", description: "Follow and interact with 2–3 useful posts." };
 }
@@ -308,8 +450,8 @@ export function inferBestAction(item: DiscoveryResult): BestAction {
 /** How likely is this source to surface ragebait, rumors, or spam? */
 export function inferNoiseRisk(item: DiscoveryResult): NoiseRisk {
   if (item.type === "search_action") {
-    if (item.platform === "x" || item.platform === "tiktok") return "High";
-    return "Medium"; // instagram/reddit/youtube/web discovery — mixed quality
+    if (item.platform === "x") return "High"; // rumor/gossip/ragebait-prone
+    return "Medium"; // instagram/tiktok/reddit/youtube/web discovery — mixed quality
   }
   if (item.confidence === "verified") return "Low";
   if (item.type === "newsletter" || item.type === "article") return "Low";
@@ -335,6 +477,41 @@ function inferFreshness(item: DiscoveryResult): Freshness {
   return item.type === "search_action" ? "trending" : "active_recently";
 }
 
+const PLATFORM_TRAINING_NAME: Record<string, string> = {
+  x: "X timeline",
+  instagram: "Instagram feed",
+  tiktok: "TikTok For You",
+  youtube: "YouTube recommendations",
+};
+
+/** Honest one-liner explaining why the item ranks where it does. */
+function inferRankingReason(item: DiscoveryResult): string {
+  const feed = PLATFORM_TRAINING_NAME[item.platform];
+  if (item.type === "search_action") {
+    return "Discovery path — secondary to direct social results.";
+  }
+  if (["post", "reel", "short"].includes(item.type) || (item.type === "video" && feed)) {
+    return `Direct short-form content result for ${feed ?? "social"} training.`;
+  }
+  if (feed) {
+    return `Direct ${item.type === "channel" ? "channel" : "profile"} result for ${feed} training.`;
+  }
+  if (item.type === "community") {
+    return "High-signal community — supports the social sections.";
+  }
+  return "Useful reference, but secondary to social algorithm training.";
+}
+
+/** popularitySignal default for items that didn't get one at extraction. */
+function inferPopularitySignal(item: DiscoveryResult): string {
+  if (item.popularitySignal) return item.popularitySignal;
+  if (item.source === "curated") {
+    return SOCIAL_PLATFORMS.has(item.platform) ? "Curated source" : "Supporting web source";
+  }
+  if (item.type === "search_action") return "In-app discovery path";
+  return "Direct result";
+}
+
 /**
  * Fills in the Verified Feed Pack quality fields on every item right before
  * it's returned to the API/UI. Idempotent — never overwrites a value a
@@ -347,5 +524,7 @@ export function finalizeFeedPackItem(item: DiscoveryResult): DiscoveryResult {
     noiseRisk: item.noiseRisk ?? inferNoiseRisk(item),
     nicheLevel: item.nicheLevel ?? inferNicheLevel(item),
     freshness: inferFreshness(item),
+    popularitySignal: inferPopularitySignal(item),
+    rankingReason: item.rankingReason ?? inferRankingReason(item),
   };
 }

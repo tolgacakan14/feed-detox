@@ -1,19 +1,7 @@
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  CalendarDays,
-  Compass,
-  Gem,
-  MessagesSquare,
-  PlayCircle,
-  TrendingUp,
-  UserPlus,
-  VolumeX,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUpRight, CalendarDays, Compass, VolumeX } from "lucide-react";
 import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
 import { PLATFORM_SHORT_LABELS } from "@/lib/platform";
-import { Badge } from "@/components/ui/badge";
 import {
   FIELD_LABEL,
   FRESHNESS_BADGE,
@@ -21,24 +9,24 @@ import {
   TYPE_BADGE,
   translations,
 } from "@/lib/i18n";
-import type { DiscoveryResult, FeedPackResult, NoiseRisk, SectionKey } from "@/types";
+import type { DiscoveryResult, FeedPackResult, NoiseRisk, Platform, SectionKey } from "@/types";
 
-const SECTION_ICON: Record<SectionKey, LucideIcon> = {
-  creators: UserPlus,
-  content: PlayCircle,
-  fresh: TrendingUp,
-  niche: Gem,
-  communities: MessagesSquare,
-  fallback: Compass,
+/** The 4 primary sections map straight to a real platform icon/brand tile;
+ * "more" (secondary sources) gets a plain compass, deliberately less bold. */
+const SECTION_PLATFORM: Partial<Record<SectionKey, Platform>> = {
+  x: "x",
+  instagram: "instagram",
+  tiktok: "tiktok",
+  youtube: "youtube",
 };
 
 const SECTION_ACCENT: Record<SectionKey, string> = {
-  creators: "from-tealbrand to-aqua",
-  content: "from-coral to-tangerine",
-  fresh: "from-aqua to-tealbrand",
-  niche: "from-tealdeep to-tealbrand",
-  communities: "from-limepunch to-emerald-500",
-  fallback: "from-muted-foreground/60 to-muted-foreground/40",
+  x: "from-neutral-900 to-neutral-700",
+  instagram: "from-fuchsia-600 via-pink-500 to-orange-400",
+  tiktok: "from-cyan-500 to-rose-600",
+  youtube: "from-red-600 to-red-500",
+  more: "from-muted-foreground/50 to-muted-foreground/30",
+  discovery: "from-muted-foreground/50 to-muted-foreground/30",
 };
 
 // Noise risk: Low = calm/reliable, Medium = neutral/mixed, High = caution.
@@ -59,9 +47,22 @@ function DetailChip({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
-function ResultCard({ result, openLabel, demoLabel }: { result: DiscoveryResult; openLabel: string; demoLabel: string }) {
+function ResultCard({
+  result,
+  openLabel,
+  demoLabel,
+  compact,
+}: {
+  result: DiscoveryResult;
+  openLabel: string;
+  demoLabel: string;
+  /** Secondary sections (e.g. "more") render smaller so they stay secondary. */
+  compact?: boolean;
+}) {
   return (
-    <article className="signal-card group flex flex-col gap-3 rounded-2xl bg-card p-5 pt-6 ring-1 ring-foreground/[0.08] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-aqua/10 hover:ring-aqua/40">
+    <article
+      className={`signal-card group flex flex-col gap-3 rounded-2xl bg-card ring-1 ring-foreground/[0.08] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-aqua/10 hover:ring-aqua/40 ${compact ? "p-3.5 pt-4.5" : "p-5 pt-6"}`}
+    >
       {/* Top row: platform + type (direct vs Discovery is communicated by the type badge itself) */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -75,7 +76,9 @@ function ResultCard({ result, openLabel, demoLabel }: { result: DiscoveryResult;
             </span>
           ) : null}
           <span className="rounded-full bg-tealbrand/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-tealdeep dark:text-aqua">
-            {TYPE_BADGE[result.type]}
+            {result.platform === "tiktok" && result.type === "video"
+              ? "TikTok"
+              : TYPE_BADGE[result.type]}
           </span>
         </div>
       </div>
@@ -154,9 +157,13 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
         <p className="mt-4 border-t border-foreground/10 pt-3 text-xs leading-5 text-muted-foreground/80">
           {t.directFallbackNote}
         </p>
-        <p className="mt-2 text-xs leading-5 text-muted-foreground/60">
-          {t.safetyNote}
-        </p>
+        {/* The "sample signals" caveat only applies when no live provider ran
+            — with real search/API results it would be false modesty. */}
+        {!result.metadata.sourcesUsed.some((s) => s === "web_search" || s === "api") ? (
+          <p className="mt-2 text-xs leading-5 text-muted-foreground/60">
+            {t.safetyNote}
+          </p>
+        ) : null}
       </header>
 
       {/* Sections */}
@@ -164,28 +171,47 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
         {SECTION_ORDER.map((key, i) => {
           const items = result.sections[key];
           if (items.length === 0) return null;
-          const Icon = SECTION_ICON[key];
+          const sectionPlatform = SECTION_PLATFORM[key];
+          const isSecondary = key === "more" || key === "discovery";
           return (
             <section
               key={key}
               className="fade-up"
               style={{ animationDelay: `${0.06 * i}s` }}
             >
-              <h2 className="flex items-center gap-2.5 font-heading text-lg font-bold">
+              <div className="flex items-center gap-2.5">
                 <span
-                  className={`flex size-8 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-sm ${SECTION_ACCENT[key]}`}
+                  className={`flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-sm ${SECTION_ACCENT[key]} ${isSecondary ? "size-6" : "size-8"}`}
                 >
-                  <Icon className="size-4" />
+                  {sectionPlatform ? (
+                    <PlatformIcon platform={sectionPlatform} className={isSecondary ? "size-3.5" : "size-4"} />
+                  ) : (
+                    <Compass className="size-3.5" />
+                  )}
                 </span>
-                {t.sections[key]}
-              </h2>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <h2
+                    className={
+                      isSecondary
+                        ? "text-sm font-semibold text-muted-foreground"
+                        : "font-heading text-lg font-bold leading-tight"
+                    }
+                  >
+                    {t.sections[key].name}
+                  </h2>
+                  {!isSecondary ? (
+                    <p className="text-xs text-muted-foreground">{t.sections[key].purpose}</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className={`mt-4 grid gap-4 ${isSecondary ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                 {items.map((item) => (
                   <ResultCard
                     key={item.id}
                     result={item}
                     openLabel={t.openLabel}
                     demoLabel={t.demoTag}
+                    compact={isSecondary}
                   />
                 ))}
               </div>

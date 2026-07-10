@@ -1,15 +1,19 @@
 import { matchFeedSources } from "@/data/feedSources";
 import { matchCurated } from "@/data/curatedSources";
-import { analyzeTopics } from "@/lib/topicIntel";
+import { analyzeTopics, type TopicIntel } from "@/lib/topicIntel";
 import {
   dedupeByUrl,
   extractDirectLinks,
   finalizeFeedPackItem,
   guardResults,
+  mergeExtracted,
   scoreResult,
   searchAction,
-  searchProvider,
+  tiktokCreatorSearch,
+  youtubeChannelSearch,
 } from "@/lib/discovery";
+import { translations } from "@/lib/i18n";
+import { isLiveSearchConfigured, searchSocial } from "@/lib/searchProviders";
 import { validateResults } from "@/lib/validateUrl";
 import type {
   DayPlanItem,
@@ -118,47 +122,47 @@ function buildTrainingPlan(topic: string, lang: "en" | "tr"): DayPlanItem[] {
 }
 
 // ── Grouping & ranking ─────────────────────────────────────────────────────
+// Platform-first: Feed Detox's job is training X/Instagram/TikTok/YouTube
+// algorithms. Every item is routed to its own platform's section; Reddit,
+// websites and newsletters are secondary and capped small in "more" so they
+// never dominate the pack the way they used to when grouping was by content
+// type instead of by platform.
 
 const SECTION_CAPS: Record<SectionKey, number> = {
-  creators: 6,
-  content: 5,
-  fresh: 4,
-  niche: 4,
-  communities: 5,
-  fallback: 2, // hard product cap — fallback never dominates a pack
+  x: 5, // top-5 rule: direct accounts/posts only
+  instagram: 5,
+  tiktok: 5,
+  youtube: 5,
+  more: 3, // secondary sources — deliberately small so they stay secondary
+  discovery: 6, // last-resort search paths — never mixed into platform sections
 };
 
-/** Product rule: search fallback links only appear when direct curated
- * matches are scarce, and never more than 2 of them. */
-const MIN_DIRECT_BEFORE_FALLBACK = 6;
-const MAX_FALLBACK_ITEMS = 2;
+/** A primary platform gets Discovery search paths added only when its
+ * direct account/content coverage is this thin — and those paths live in
+ * the separate "discovery" section, never among the platform's top cards. */
+const MIN_DIRECT_PER_PLATFORM = 3;
 
 const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
-  creators: [],
-  content: [],
-  fresh: [],
-  niche: [],
-  communities: [],
-  fallback: [],
+  x: [],
+  instagram: [],
+  tiktok: [],
+  youtube: [],
+  more: [],
+  discovery: [],
 });
 
-/** Place each item in exactly one section by what it does for the feed. */
+/** Route each item to its own platform's section. Search/discovery pages
+ * NEVER enter a platform section — they go to the low-priority discovery
+ * bucket, so every platform card is a real, direct destination. */
 function groupResults(items: DiscoveryResult[], topics: string[]) {
   const buckets = EMPTY();
   for (const it of items) {
-    if (it.type === "search_action") buckets.fallback.push(it);
-    else if (it.type === "community" || it.type === "newsletter") buckets.communities.push(it);
-    else if (it.type === "creator" || it.type === "account" || it.type === "channel")
-      buckets.creators.push(it);
-    else if (it.freshness === "trending" || it.freshness === "active_recently") buckets.fresh.push(it);
-    else if (
-      it.popularity === "niche" ||
-      it.type === "website" ||
-      it.type === "article" ||
-      it.engagementLabel === "Niche quality"
-    )
-      buckets.niche.push(it);
-    else buckets.content.push(it);
+    if (it.type === "search_action") buckets.discovery.push(it);
+    else if (it.platform === "x") buckets.x.push(it);
+    else if (it.platform === "instagram") buckets.instagram.push(it);
+    else if (it.platform === "tiktok") buckets.tiktok.push(it);
+    else if (it.platform === "youtube") buckets.youtube.push(it);
+    else buckets.more.push(it); // reddit, web, newsletter, spotify
   }
   (Object.keys(buckets) as SectionKey[]).forEach((k) => {
     buckets[k] = dedupeByUrl(buckets[k])
@@ -166,6 +170,68 @@ function groupResults(items: DiscoveryResult[], topics: string[]) {
       .slice(0, SECTION_CAPS[k]);
   });
   return buckets;
+}
+
+const DISCOVERY_REASON: Record<"x" | "instagram" | "tiktok" | "youtube", [string, string]> = {
+  x: [
+    "Follow 3–5 accounts that post analysis, not outrage — then bookmark the good threads.",
+    "A second angle on X — different search, same goal: real accounts over rumor threads.",
+  ],
+  instagram: [
+    "Follow 2–3 pages, then watch a few Reels fully — Explore updates fast.",
+    "Try a different angle here too — creator pages surface differently than fan pages.",
+  ],
+  tiktok: [
+    "Follow 2–3 creators here — TikTok reshapes your For You page within days.",
+    "A second TikTok search — watch a few videos fully to lock in the signal.",
+  ],
+  youtube: [
+    "Subscribing to 2–3 quality channels reshapes your YouTube Home fastest.",
+    "A second YouTube angle — full watches on niche content train recommendations fastest.",
+  ],
+};
+
+/**
+ * For each of the 4 primary platforms, add Discovery search paths when
+ * direct coverage is thin — never invents accounts. Each platform gets its
+ * OWN query strategy (from topicIntel's platformQueries), not the bare topic
+ * reused everywhere: the primary query is creator/channel-scoped, and if the
+ * platform has ZERO real accounts at all, a second query (a different
+ * angle — official/analysis) is added so the user still has two real entry
+ * points. Never more than 2 discovery items per platform.
+ */
+function addPlatformDiscovery(
+  buckets: Record<SectionKey, DiscoveryResult[]>,
+  topic: string,
+  platformQueries: TopicIntel["platformQueries"],
+): void {
+  (["x", "instagram", "tiktok", "youtube"] as const).forEach((key) => {
+    const originalCount = buckets[key].length;
+    if (originalCount >= MIN_DIRECT_PER_PLATFORM) return;
+
+    const queries = platformQueries[key];
+    const [primaryReason, secondaryReason] = DISCOVERY_REASON[key];
+    // Query strings already name the platform/angle (e.g. "topic official
+    // Instagram") — use a plain title so it isn't mentioned twice.
+    const titleFor = (query: string) => `Explore “${query}”`;
+
+    const primary =
+      key === "tiktok"
+        ? tiktokCreatorSearch(topic)
+        : key === "youtube"
+          ? youtubeChannelSearch(topic)
+          : searchAction(key, queries[0], primaryReason, titleFor(queries[0]));
+    // Discovery paths live in the low-priority discovery section — never
+    // among the platform's top cards.
+    buckets.discovery.push(primary);
+
+    // Platform is completely empty — give a second, differently-angled
+    // discovery path instead of leaving the user with just one search.
+    if (originalCount === 0) {
+      const q2 = queries[2] ?? queries[1] ?? topic;
+      buckets.discovery.push(searchAction(key, q2, secondaryReason, titleFor(q2)));
+    }
+  });
 }
 
 // ── Generic discovery pool ──────────────────────────────────────────────────
@@ -176,7 +242,7 @@ function groupResults(items: DiscoveryResult[], topics: string[]) {
 const GENERIC_DIRECT_POOL: DiscoveryResult[] = [
   {
     id: "generic-ted", title: "TED", url: "https://www.youtube.com/@TED",
-    platform: "youtube", type: "video", source: "curated", confidence: "verified",
+    platform: "youtube", type: "channel", source: "curated", confidence: "verified",
     isDirectLink: true, isDemo: true, creatorName: "TED", handle: "@TED",
     category: "General", itemLanguage: "en", popularity: "global",
     freshness: "evergreen", engagementLabel: "High engagement",
@@ -227,14 +293,45 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     id: `curated-${i}-${s.title.toLowerCase().replace(/\W+/g, "-")}`,
   }));
 
-  // 2) Optional live search (no provider configured yet) → classified direct links.
+  // 2) Live social discovery — platform-scoped queries through the real
+  // provider layer (YouTube Data API and/or a web-search API, env-keyed).
+  // Web queries are site:-scoped so results ARE social URLs; the extractor
+  // then keeps only recognizable direct profiles/posts/videos. Without any
+  // key this is a no-op and the pack runs on curated data — never fakes.
   let searched: DiscoveryResult[] = [];
-  if (searchProvider) {
-    const settled = await Promise.allSettled(
-      intel.searchQueries.slice(0, 4).map((query) => searchProvider!(query)),
-    );
-    searched = extractDirectLinks(
-      settled.flatMap((r) => (r.status === "fulfilled" ? r.value : [])),
+  if (isLiveSearchConfigured()) {
+    const SITE_SCOPE = {
+      x: "site:x.com OR site:twitter.com",
+      instagram: "site:instagram.com",
+      tiktok: "site:tiktok.com",
+    } as const;
+
+    const calls: Promise<DiscoveryResult[]>[] = [];
+    (["x", "instagram", "tiktok"] as const).forEach((p) => {
+      intel.platformQueries[p].slice(0, 2).forEach((query) => {
+        calls.push(
+          searchSocial(`${SITE_SCOPE[p]} ${query}`, p).then((hits) =>
+            extractDirectLinks(hits, "web_search"),
+          ),
+        );
+      });
+    });
+    // YouTube goes through the Data API when keyed (real engagement-backed
+    // results); otherwise the same site:-scoped web search.
+    intel.platformQueries.youtube.slice(0, 2).forEach((query) => {
+      calls.push(
+        searchSocial(query, "youtube").then((hits) =>
+          extractDirectLinks(
+            hits,
+            hits.some((h) => h.source === "youtube_api") ? "api" : "web_search",
+          ),
+        ),
+      );
+    });
+
+    const settled = await Promise.allSettled(calls);
+    searched = mergeExtracted(
+      settled.map((r) => (r.status === "fulfilled" ? r.value : [])),
     );
   }
 
@@ -251,26 +348,15 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     realPool = GENERIC_DIRECT_POOL;
   }
 
-  // 3) Search fallbacks — real platform search pages. These are ONLY added
-  // when direct matches are scarce, and never more than MAX_FALLBACK_ITEMS.
-  // This is the core product rule: search links are fallback, not the
-  // main output. Most topics (10+ curated categories) never trigger this.
-  const fallbacks: DiscoveryResult[] =
-    realPool.length < MIN_DIRECT_BEFORE_FALLBACK
-      ? [
-          searchAction("youtube", t, "Open and finish 2–3 results — watch time is YouTube's strongest signal."),
-          searchAction("x", t, "Follow 3–5 accounts here that post analysis, not outrage."),
-          searchAction("tiktok", t, "Watch a few results fully — your For You page updates within days."),
-          searchAction("reddit", intel.searchQueries[1] ?? t),
-        ].slice(0, MAX_FALLBACK_ITEMS)
-      : [];
-
-  // Grouping happens on the RAW freshness/popularity signal (undefined means
-  // "no signal, use type/popularity instead"). Verified Feed Pack quality
-  // fields (whyItMatters/bestAction/noiseRisk/nicheLevel/freshness defaults)
-  // are filled in per-bucket AFTER grouping, so a defaulted freshness value
-  // never leaks back into where an item gets placed.
-  const sections = groupResults([...realPool, ...fallbacks], topics);
+  // Route every direct item to its own platform's section, then top up any
+  // of the 4 primary platforms that came up thin with ONE honest Discovery
+  // search path — never a fake account, and never more than one per
+  // platform. Verified Feed Pack quality fields (bestAction/noiseRisk/
+  // nicheLevel/freshness defaults) are filled in per-bucket AFTER grouping,
+  // so a defaulted value never leaks back into where an item gets placed.
+  const sections = groupResults(realPool, topics);
+  addPlatformDiscovery(sections, t, intel.platformQueries);
+  sections.discovery = sections.discovery.slice(0, SECTION_CAPS.discovery);
 
   (Object.keys(sections) as SectionKey[]).forEach((k) => {
     sections[k] = sections[k]
@@ -297,11 +383,23 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
 
   const summary = isGenericDiscovery
     ? input.uiLang === "tr"
-      ? `“${t}” henüz curated kaynak setimizde yok, o yüzden geniş kapsamlı direct source’lar getirdik. Bu konuya özel real-time source discovery ileride eklenebilir.`
-      : `“${t}” isn't in our curated set yet, so here are broad direct sources to start with. Topic-specific real-time source discovery can be added later.`
+      ? `“${t}” henüz curated kaynak setimizde yok, o yüzden X, Instagram, TikTok ve YouTube için geniş kapsamlı direct source’lar getirdik. Bu konuya özel real-time source discovery ileride eklenebilir.`
+      : `“${t}” isn't in our curated set yet, so here are broad direct sources across X, Instagram, TikTok and YouTube to start with. Topic-specific real-time source discovery can be added later.`
     : input.uiLang === "tr"
-      ? `“${t}” için en iyi creator, content ve community’ler — her biri feed’ine ne katıyorsa ona göre gruplandı.`
-      : `The best creators, content and communities for “${t}” — grouped by what each one does for your feed.`;
+      ? `“${t}” için X, Instagram, TikTok ve YouTube’unu eğitecek creator ve content’ler — platform platform gruplandı. Less noise, more signal.`
+      : `Here's your platform-by-platform plan for “${t}” — X, Instagram, TikTok and YouTube, each with direct creators and content to train that app's algorithm. Less noise, more signal.`;
+
+  // Self-describing, platform-first view of the same items — the shape API
+  // consumers should read. `sections` stays for the existing UI.
+  const dict = translations[input.uiLang].sections;
+  const platformSections = {
+    x: { title: dict.x.name, purpose: dict.x.purpose, items: sections.x },
+    instagram: { title: dict.instagram.name, purpose: dict.instagram.purpose, items: sections.instagram },
+    tiktok: { title: dict.tiktok.name, purpose: dict.tiktok.purpose, items: sections.tiktok },
+    youtube: { title: dict.youtube.name, purpose: dict.youtube.purpose, items: sections.youtube },
+    supportingSources: { title: dict.more.name, purpose: dict.more.purpose, items: sections.more },
+    moreDiscoveryPaths: { title: dict.discovery.name, purpose: dict.discovery.purpose, items: sections.discovery },
+  };
 
   return {
     input,
@@ -309,6 +407,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     unwantedTopics: parsed.unwanted,
     summary,
     sections,
+    platformSections,
     muteKeywords,
     trainingPlan: buildTrainingPlan(t, input.uiLang),
     metadata: {

@@ -27,7 +27,7 @@ export interface Dict {
   resultTitle: string;
   safetyNote: string;
   directFallbackNote: string;
-  sections: Record<SectionKey, string>;
+  sections: Record<SectionKey, { name: string; purpose: string }>;
   openLabel: string; // footer "Open" button — same for every card, every section
   muteTitle: string;
   planTitle: string;
@@ -38,14 +38,7 @@ export interface Dict {
   demoTag: string;
 }
 
-const SHARED_SECTION_ORDER: SectionKey[] = [
-  "creators",
-  "content",
-  "fresh",
-  "niche",
-  "communities",
-  "fallback",
-];
+const SHARED_SECTION_ORDER: SectionKey[] = ["x", "instagram", "tiktok", "youtube", "more", "discovery"];
 
 export const translations: Record<UiLang, Dict> = {
   en: {
@@ -69,18 +62,18 @@ export const translations: Record<UiLang, Dict> = {
       "Follow, watch, save and mute to train your algorithm.",
       "Your engagement is the signal. We just point it at better sources.",
     ],
-    resultTitle: "Your Feed Education Pack is ready.",
+    resultTitle: "Your Feed Pack is ready.",
     safetyNote:
       "Demo MVP: recommendations are sample signals. Real-time creator/content ranking can be added with search/API integrations.",
     directFallbackNote:
-      "Feed Detox prioritizes direct creators, content, channels and communities — search links appear only in Explore More, when curated sources are limited.",
+      "Feed Detox prioritizes direct accounts, creators and content on each platform — search links appear as Discovery only when direct coverage is thin.",
     sections: {
-      creators: "Top creators to follow",
-      content: "Direct content to watch",
-      fresh: "Fresh & trending signals",
-      niche: "Niche quality sources",
-      communities: "Communities & newsletters",
-      fallback: "Explore More",
+      x: { name: "X / Twitter", purpose: "Clean your timeline with better accounts and threads." },
+      instagram: { name: "Instagram", purpose: "Tune Reels and Explore with stronger creators." },
+      tiktok: { name: "TikTok", purpose: "Train your For You page with better short-form signals." },
+      youtube: { name: "YouTube / Shorts", purpose: "Improve recommendations with channels, videos and Shorts." },
+      more: { name: "Supporting Sources", purpose: "Useful extra resources, but secondary to social feed training." },
+      discovery: { name: "More discovery paths", purpose: "Real in-app searches for platforms where direct coverage is still thin." },
     },
     openLabel: "Open",
     muteTitle: "Mute keywords",
@@ -115,14 +108,14 @@ export const translations: Record<UiLang, Dict> = {
     safetyNote:
       "Demo MVP: öneriler şimdilik sample signal’lardır. Real-time creator/content ranking ileride search/API entegrasyonlarıyla eklenebilir.",
     directFallbackNote:
-      "Feed Detox önce direct creator, content, channel ve community önerir — search link’leri sadece curated source azsa Daha Fazla Keşfet’te görünür.",
+      "Feed Detox her platformda önce direct account ve creator önerir — search link’leri sadece direct kaynak azsa Discovery olarak görünür.",
     sections: {
-      creators: "Takip edilecek creator’lar",
-      content: "İzlenecek direct content’ler",
-      fresh: "Fresh & trending signal’lar",
-      niche: "Niche ama kaliteli kaynaklar",
-      communities: "Community ve newsletter’lar",
-      fallback: "Daha Fazla Keşfet",
+      x: { name: "X / Twitter", purpose: "Daha iyi account ve thread’lerle timeline’ını temizle." },
+      instagram: { name: "Instagram", purpose: "Daha güçlü creator’larla Reels ve Explore’unu iyileştir." },
+      tiktok: { name: "TikTok", purpose: "Daha iyi short-form signal’larla For You’nu eğit." },
+      youtube: { name: "YouTube / Shorts", purpose: "Channel, video ve Shorts’larla önerilerini iyileştir." },
+      more: { name: "Supporting source’lar", purpose: "Faydalı ekstra kaynaklar — social feed training’e göre ikincil." },
+      discovery: { name: "Daha fazla discovery path", purpose: "Direct kaynak az olan platformlar için gerçek in-app aramalar." },
     },
     openLabel: "Aç",
     muteTitle: "Mute edilecek keyword’ler",
@@ -140,8 +133,10 @@ export const SECTION_ORDER = SHARED_SECTION_ORDER;
 export const TYPE_BADGE: Record<string, string> = {
   creator: "Creator",
   account: "Creator",
-  channel: "Creator",
+  channel: "Channel",
   video: "Video",
+  short: "Shorts",
+  reel: "Reel",
   post: "Post",
   community: "Community",
   newsletter: "Newsletter",

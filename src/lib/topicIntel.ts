@@ -3,16 +3,26 @@ import type { Platform } from "@/types";
 /**
  * Topic Intelligence Module.
  *
- * Takes a raw user topic and returns structured intent: topic type(s),
- * expanded search queries, and a platform strategy. Rule-based for the MVP —
- * it only produces queries and strategy, never final recommendations, so it
- * can later be swapped for an AI call with the same output shape.
+ * Takes a raw user topic and returns structured intent: topic type(s), a
+ * platform strategy, and — critically — SEPARATE query strategies per social
+ * platform (X/Instagram/TikTok/YouTube), not one generic query reused
+ * everywhere. Rule-based for the MVP — it only produces queries and
+ * strategy, never final accounts/URLs, so it can later be swapped for an AI
+ * call with the same output shape.
  */
+
+/** The 4 primary social platforms Feed Detox exists to train. */
+export type PrimarySocialPlatform = "x" | "instagram" | "tiktok" | "youtube";
 
 export interface TopicIntel {
   mainTopic: string;
   topicTypes: string[];
-  searchQueries: string[]; // expanded, ready for search URLs
+  /** One-line "what to look for" per platform, e.g. for cards/UI copy. */
+  platformFit: Record<PrimarySocialPlatform, string>;
+  /** 4 distinct query angles per platform: official / creator / analysis /
+   * short-form / niche — never the bare topic repeated everywhere. */
+  platformQueries: Record<PrimarySocialPlatform, string[]>;
+  searchQueries: string[]; // expanded, generic — kept for the searchProvider seam
   platforms: Platform[]; // ordered by relevance for this topic type
   muteHints: string[]; // topic-type-specific low-quality patterns
 }
@@ -239,6 +249,102 @@ const GENERAL: Omit<TypeDef, "keywords"> = {
   muteHints: ["ragebait", "engagement farming", "spam reposts", "low-quality ai slop"],
 };
 
+// ── Per-platform query generation ───────────────────────────────────────────
+// Each of the 4 primary platforms gets its OWN query strategy — never the
+// bare topic reused everywhere. Angle 1 (official/creator) and angle 3
+// (analysis/deep-dive) reuse the type-specific queryTemplates above for
+// topical flavor (so "sports" queries lean tactical/highlights, "tech_ai"
+// leans tutorial/demo, etc.) — this is what lets the same 4-angle system
+// adapt its depth per topic without a template matrix per type × platform.
+
+const PRIMARY_PLATFORMS = ["x", "instagram", "tiktok", "youtube"] as const;
+
+/** Strip "{t} " / " {t}" from a template to get a standalone content-angle noun phrase. */
+function angleFrom(template: string | undefined, topic: string): string {
+  if (!template) return "";
+  return template.replace("{t}", topic).replace(topic, "").trim();
+}
+
+/**
+ * Only entity-like topics (a club, a team, a brand — sports category is the
+ * reliable rule-based signal for that today) get "official account"-style
+ * queries. Generic topics ("AI tools", "deep house") get creator/demo/
+ * tutorial phrasing — searching "ai tools official account" is a dead end
+ * that returns empty pages.
+ */
+function buildPlatformQueries(
+  topic: string,
+  def: TypeDef | undefined,
+): Record<(typeof PRIMARY_PLATFORMS)[number], string[]> {
+  const templates = def?.queryTemplates ?? GENERAL.queryTemplates;
+  const angle1 = angleFrom(templates[0], topic); // e.g. "tactical analysis" / "tutorial" / "mix"
+  const angle2 = angleFrom(templates[1], topic); // e.g. "highlights" / "explained" / "new releases"
+  const isEntity = def?.type === "sports";
+
+  if (isEntity) {
+    return {
+      x: [
+        `${topic} official account`,
+        `${topic}${angle1 ? ` ${angle1}` : ""} thread`,
+        `${topic} analyst`,
+        `${topic} fan account`,
+      ],
+      instagram: [
+        `${topic} official Instagram`,
+        `${topic} Reels`,
+        `${topic} fan page`,
+        `${topic} edits`,
+      ],
+      tiktok: [
+        `${topic} TikTok`,
+        `${topic} edits`,
+        `${topic}${angle1 ? ` ${angle1}` : ""}`.trim(),
+        `${topic} fan TikTok`,
+      ],
+      youtube: [
+        `${topic} channel`,
+        `${topic} Shorts`,
+        `${topic}${angle1 ? ` ${angle1}` : ""}`.trim(),
+        `${topic}${angle2 ? ` ${angle2}` : " highlights"}`.trim(),
+      ],
+    };
+  }
+
+  return {
+    x: [
+      `${topic} creators`,
+      `best ${topic} accounts`,
+      `${topic}${angle1 ? ` ${angle1}` : ""} thread`,
+      `${topic} curator`,
+    ],
+    instagram: [
+      `${topic} Reels`,
+      `${topic} creator`,
+      `${topic}${angle2 ? ` ${angle2}` : " demos"}`,
+      `${topic} pages to follow`,
+    ],
+    tiktok: [
+      `${topic} TikTok`,
+      `${topic}${angle1 ? ` ${angle1}` : " demos"} TikTok`,
+      `${topic} creator`,
+      `${topic} explained`,
+    ],
+    youtube: [
+      `${topic} channel`,
+      `${topic} Shorts`,
+      `${topic}${angle1 ? ` ${angle1}` : ""}`.trim(),
+      `best ${topic} videos`,
+    ],
+  };
+}
+
+const PLATFORM_FIT_TEMPLATE: Record<(typeof PRIMARY_PLATFORMS)[number], (t: string, angle: string) => string> = {
+  x: (t, angle) => `Accounts, analysts and threads about ${t}${angle ? ` — especially ${angle}` : ""}.`,
+  instagram: (t) => `Creator pages and Reels about ${t}.`,
+  tiktok: (t) => `Short-form creators and edits about ${t}.`,
+  youtube: (t, angle) => `Channels, videos and Shorts about ${t}${angle ? `, including ${angle}` : ""}.`,
+};
+
 /** Analyze one or more user topics into a combined strategy. */
 export function analyzeTopics(topics: string[]): TopicIntel {
   const mainTopic = topics[0] ?? "your interests";
@@ -262,8 +368,15 @@ export function analyzeTopics(topics: string[]): TopicIntel {
     }
   });
 
+  const angle1 = angleFrom(queryTemplates[0], mainTopic);
+  const platformFit = Object.fromEntries(
+    PRIMARY_PLATFORMS.map((p) => [p, PLATFORM_FIT_TEMPLATE[p](mainTopic, angle1)]),
+  ) as TopicIntel["platformFit"];
+
   return {
     mainTopic,
+    platformFit,
+    platformQueries: buildPlatformQueries(mainTopic, defs[0]),
     topicTypes: defs.length > 0 ? defs.map((d) => d.type) : ["general"],
     searchQueries: searchQueries.slice(0, 8),
     platforms,

@@ -29,12 +29,14 @@ export type DiscoveryType =
   | "account" // legacy alias for creator (X/IG/TikTok profile)
   | "channel" // YouTube channel — displayed as Creator
   | "video"
-  | "post"
+  | "short" // YouTube Short
+  | "reel" // Instagram Reel (or /p/ post)
+  | "post" // X post/thread (status URL)
   | "community"
   | "newsletter"
   | "website"
   | "article"
-  | "search_action"; // a platform search page — labelled "Search fallback"
+  | "search_action"; // a platform search page — labelled "Discovery"
 
 /** Curated demo signal metadata (structured now so real-time ranking can
  * plug in later). These labels are sample/demo values, not live engagement. */
@@ -61,6 +63,8 @@ export type BestActionLabel =
   | "Read"
   | "Subscribe"
   | "Explore"
+  | "Bookmark"
+  | "Add to List"
   | "Mute"
   | "Avoid";
 export interface BestAction {
@@ -93,6 +97,15 @@ export interface DiscoveryResult {
   bestAction?: BestAction;
   noiseRisk?: NoiseRisk;
   nicheLevel?: NicheLevel;
+  /** Honest, non-numeric popularity evidence, e.g. "High-ranking search
+   * result", "Appears across multiple social searches", "YouTube API result".
+   * Never a fake follower/view count. */
+  popularitySignal?: string;
+  /** Why this item ranks where it does, e.g. "Direct short-form content
+   * result for Instagram feed training". */
+  rankingReason?: string;
+  /** Internal: 0-based rank in the search results it came from (ranking input). */
+  searchRank?: number;
   // ── Curated demo signal metadata (optional) ──
   creatorName?: string;
   handle?: string;
@@ -117,13 +130,27 @@ export interface DayPlanItem {
   description: string;
 }
 
+/**
+ * Platform-first Feed Pack structure. Feed Detox's core job is training the
+ * algorithms of these four apps — everything else (Reddit, websites,
+ * newsletters) is secondary and lives in "more", capped small so it never
+ * dominates the pack.
+ */
 export type SectionKey =
-  | "creators" // Top creators to follow
-  | "content" // Popular content to watch
-  | "fresh" // Fresh & trending signals
-  | "niche" // Niche quality sources
-  | "communities" // Communities & newsletters
-  | "fallback"; // Search fallbacks (bottom)
+  | "x" // X / Twitter — clean the timeline (DIRECT links only)
+  | "instagram" // Instagram — improve Reels & Explore (DIRECT links only)
+  | "tiktok" // TikTok — improve For You / Discover (DIRECT links only)
+  | "youtube" // YouTube — improve Shorts & recommendations (DIRECT links only)
+  | "more" // secondary: Reddit, websites, newsletters
+  | "discovery"; // last-resort: real platform search paths, never primary
+
+/** Self-describing platform group for API consumers (title/purpose embedded,
+ * localized to the request's uiLang). Mirrors `sections` — same items. */
+export interface PlatformSection {
+  title: string;
+  purpose: string;
+  items: DiscoveryResult[];
+}
 
 export interface FeedPackResult {
   input: FeedPackInput;
@@ -132,6 +159,9 @@ export interface FeedPackResult {
   /** Bot summary line; explains the search-action fallback when relevant. */
   summary: string;
   sections: Record<SectionKey, DiscoveryResult[]>;
+  /** Platform-first named view of the same data: x, instagram, tiktok,
+   * youtube, supportingSources, moreDiscoveryPaths. */
+  platformSections: Record<string, PlatformSection>;
   muteKeywords: string[];
   trainingPlan: DayPlanItem[];
   metadata: {
