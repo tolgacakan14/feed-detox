@@ -171,11 +171,38 @@ const EMPTY = (): Record<SectionKey, DiscoveryResult[]> => ({
   discovery: [],
 });
 
+const PROFILE_TYPES = new Set(["account", "creator", "channel"]);
+const CONTENT_TYPES = new Set(["post", "reel", "video", "short"]);
+const PLATFORM_KEYS: SectionKey[] = ["x", "instagram", "tiktok", "youtube"];
+
+/**
+ * Healthy section mix: when a platform has BOTH profiles and watchable
+ * content, the top-5 shouldn't be all-videos (weak metadata risk) or
+ * all-profiles (nothing to watch right now) — take the 1–2 best profiles
+ * plus the 2–4 best content items, then fill any remaining slots by score.
+ * Sections with only one kind just take the top-scored items as before.
+ */
+function mixSection(sorted: DiscoveryResult[], cap: number): DiscoveryResult[] {
+  const profiles = sorted.filter((r) => PROFILE_TYPES.has(r.type));
+  const contents = sorted.filter((r) => CONTENT_TYPES.has(r.type));
+  if (profiles.length === 0 || contents.length === 0) return sorted.slice(0, cap);
+  const picked = new Set<DiscoveryResult>(profiles.slice(0, 2));
+  for (const c of contents) {
+    if (picked.size >= cap) break;
+    picked.add(c);
+  }
+  for (const r of sorted) {
+    if (picked.size >= cap) break;
+    picked.add(r);
+  }
+  return sorted.filter((r) => picked.has(r)); // display order stays by score
+}
+
 /** Route each item to its own platform's section. Search/discovery pages
  * NEVER enter a platform section — they go to the low-priority discovery
  * bucket, so every platform card is a real, direct destination. Ranking
- * runs on the full TopicContext (related terms, negative terms, quality
- * intent), so the top-5 cut is semantic, not keyword-based. */
+ * runs on the full TopicContext (related terms, positive/negative signals,
+ * quality intent), so the top-5 cut is semantic, not keyword-based. */
 function groupResults(items: DiscoveryResult[], ctx: TopicContext) {
   const buckets = EMPTY();
   for (const it of items) {
@@ -187,13 +214,14 @@ function groupResults(items: DiscoveryResult[], ctx: TopicContext) {
     else buckets.more.push(it); // reddit, web, newsletter, spotify
   }
   (Object.keys(buckets) as SectionKey[]).forEach((k) => {
-    buckets[k] = dedupeByUrl(buckets[k])
-      .sort(
-        (a, b) =>
-          scoreResult(b, ctx.topics, ctx.avoidEntities, ctx) -
-          scoreResult(a, ctx.topics, ctx.avoidEntities, ctx),
-      )
-      .slice(0, SECTION_CAPS[k]);
+    const sorted = dedupeByUrl(buckets[k]).sort(
+      (a, b) =>
+        scoreResult(b, ctx.topics, ctx.avoidEntities, ctx) -
+        scoreResult(a, ctx.topics, ctx.avoidEntities, ctx),
+    );
+    buckets[k] = PLATFORM_KEYS.includes(k)
+      ? mixSection(sorted, SECTION_CAPS[k])
+      : sorted.slice(0, SECTION_CAPS[k]);
   });
   return buckets;
 }
@@ -415,7 +443,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
 
   (Object.keys(sections) as SectionKey[]).forEach((k) => {
     sections[k] = sections[k]
-      .map(finalizeFeedPackItem)
+      .map((it) => finalizeFeedPackItem(it, ctx, input.uiLang))
       // Anti-hallucination completeness guard: a card missing a required
       // field shouldn't reach the UI, even though finalize should always
       // fill these — this is the last checkpoint before returning.

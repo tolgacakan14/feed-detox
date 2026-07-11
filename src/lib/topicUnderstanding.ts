@@ -33,6 +33,10 @@ export interface TopicContext {
   /** The junk this category's feeds drown in — used in "instead of …" copy. */
   junkLabel: string;
   relatedTerms: string[];
+  /** Vocabulary that marks HIGH-quality content for this category (e.g.
+   * "tactical analysis" for a club, "full set" for a music genre) — boosts
+   * contentQuality in ranking. */
+  positiveSignals: string[];
   negativeTerms: string[];
   qualityIntent: QualityIntent;
   /** Platforms the user named in the prompt itself ("galatasaray youtube"). */
@@ -53,6 +57,8 @@ interface CategoryProfile {
   label: string;
   junk: string;
   related: (t: string) => string[];
+  /** Marks of genuinely good content in this category — ranking boost. */
+  positive: string[];
   negative: string[];
 }
 
@@ -64,6 +70,7 @@ const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
       `${t} analysis`, `${t} tactical analysis`, `${t} highlights`,
       `${t} official`, "match analysis", "matchday", "tactics",
     ],
+    positive: ["official", "match analysis", "tactical", "lineup", "press conference", "highlights", "fan community"],
     negative: ["betting", "bahis", "iddaa", "fake transfer", "transfer bomb", "rumor", "dedikodu", "kupon"],
   },
   music: {
@@ -73,6 +80,7 @@ const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
       `${t} mix`, `${t} dj set`, `${t} live set`, `${t} label`,
       "boiler room", "underground", "vinyl set", "essential mix",
     ],
+    positive: ["full set", "mix", "dj set", "live set", "label", "curated", "b2b"],
     negative: ["repost", "playlist spam", "type beat", "leaked album", "sped up nightcore"],
   },
   fashion: {
@@ -82,6 +90,7 @@ const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
       `${t} outfit`, `${t} styling`, `${t} lookbook`, `${t} fit`,
       "street style", "street snaps", "archive fashion", "menswear",
     ],
+    positive: ["styling", "lookbook", "street snaps", "archive", "fit check", "how to style"],
     negative: ["haul", "dropshipping", "replica", "fake luxury", "aliexpress", "dhgate"],
   },
   tech_ai: {
@@ -91,66 +100,77 @@ const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
       `${t} tutorial`, `${t} workflow`, `${t} demo`, `${t} comparison`,
       "automation", "productivity", "no-code", "developer tools",
     ],
+    positive: ["tutorial", "workflow", "use case", "comparison", "demo", "hands-on", "step by step"],
     negative: ["get rich", "crypto", "airdrop", "passive income", "make money with ai", "10x your"],
   },
   gaming: {
     label: "gaming",
     junk: "rage compilations",
     related: (t) => [`${t} review`, `${t} gameplay`, `${t} devlog`, "hidden gems", "speedrun"],
+    positive: ["review", "devlog", "deep dive", "retrospective", "gameplay"],
     negative: ["console war", "fake leak", "rage compilation"],
   },
   food: {
     label: "cooking",
     junk: "engagement-bait recipes",
     related: (t) => [`${t} recipe`, `${t} technique`, `${t} meal prep`, "chef", "home cooking"],
+    positive: ["recipe", "technique", "meal prep", "from scratch", "chef"],
     negative: ["miracle diet", "fake health", "1 ingredient hack"],
   },
   finance: {
     label: "long-term finance",
     junk: "get-rich-quick noise",
     related: (t) => [`${t} explained`, `${t} strategy`, "long term investing", "index funds"],
+    positive: ["explained", "long term", "strategy", "fundamentals", "index"],
     negative: ["get rich", "guaranteed returns", "signal group", "pump", "forex bot"],
   },
   science_edu: {
     label: "science and learning",
     junk: "pseudoscience bait",
     related: (t) => [`${t} explained`, `${t} documentary`, `${t} lecture`, "research", "deep dive"],
+    positive: ["explained", "lecture", "documentary", "research", "deep dive"],
     negative: ["conspiracy", "pseudoscience", "fake facts", "they don't want you to know"],
   },
   film_tv: {
     label: "film and TV",
     junk: "spoiler and rage reviews",
     related: (t) => [`${t} video essay`, `${t} analysis`, `${t} breakdown`, "cinematography", "director"],
+    positive: ["video essay", "analysis", "breakdown", "cinematography", "retrospective"],
     negative: ["spoiler", "fake casting", "rage review", "woke bait"],
   },
   health: {
     label: "evidence-based health",
     junk: "miracle-cure spam",
     related: (t) => [`${t} routine`, `${t} science`, `${t} evidence based`, "coach", "mobility"],
+    positive: ["evidence based", "routine", "science", "certified", "programme"],
     negative: ["miracle cure", "before after", "detox tea", "one weird trick"],
   },
   career: {
     label: "career and productivity",
     junk: "hustle-bro noise",
     related: (t) => [`${t} advice`, `${t} systems`, `${t} guide`, "deep work", "portfolio", "interview prep"],
+    positive: ["advice", "systems", "guide", "portfolio", "interview prep", "deep work"],
     negative: ["hustle", "grindset", "get rich", "motivational spam", "sigma"],
   },
   photography: {
     label: "photography",
     junk: "preset spam",
     related: (t) => [`${t} tips`, `${t} inspiration`, `${t} composition`, "street photography", "editing"],
+    positive: ["composition", "tutorial", "tips", "behind the scenes", "editing walkthrough"],
     negative: ["preset pack", "gear war", "free lightroom"],
   },
   news_politics: {
     label: "calm analysis",
     junk: "outrage threads",
     related: (t) => [`${t} analysis`, `${t} explained`, `${t} podcast`, "long form"],
+    positive: ["analysis", "explained", "long form", "podcast", "context"],
     negative: ["ragebait", "breaking", "outrage", "destroys", "owns"],
   },
   general: {
     label: "this topic",
     junk: "random viral content",
     related: (t) => [`${t} explained`, `best ${t}`, `${t} guide`, `${t} community`, `${t} creator`],
+    positive: ["explained", "guide", "review", "deep dive", "how to"],
     negative: [],
   },
 };
@@ -226,6 +246,7 @@ export function understandTopic(rawTopics: string[], prompt: string): TopicConte
     categoryLabel: profile.label,
     junkLabel: profile.junk,
     relatedTerms,
+    positiveSignals: profile.positive.map((s) => s.toLowerCase()),
     negativeTerms: profile.negative,
     qualityIntent: {
       wantsShorts: /\b(shorts?|reels?)\b/i.test(prompt),

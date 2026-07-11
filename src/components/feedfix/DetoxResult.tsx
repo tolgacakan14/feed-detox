@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Compass, Plus, VolumeX } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Compass, VolumeX } from "lucide-react";
 import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
 import { LangSync } from "@/components/feedfix/LangSync";
-import { PLATFORM_LABELS, PLATFORM_SHORT_LABELS } from "@/lib/platform";
-import { encodeFeedPackInput } from "@/lib/generateFeedPack";
+import { PlatformExpansionButtons } from "@/components/feedfix/PlatformExpansionButtons";
+import { PLATFORM_SHORT_LABELS } from "@/lib/platform";
 import {
   FIELD_LABEL,
   FRESHNESS_BADGE,
@@ -139,20 +139,9 @@ function ResultCard({
   );
 }
 
-const ALL_TRAINABLE: TrainablePlatform[] = ["x", "instagram", "youtube", "tiktok"];
-
 export function DetoxResult({ result }: { result: FeedPackResult }) {
   const lang = result.input.uiLang;
   const t = translations[lang];
-
-  // Platforms this pack was built for; the rest become elegant expansion
-  // buttons ("Also build this Feed Pack for: …") that regenerate the same
-  // topic with that platform added — pure query-state, no persistence.
-  const selected =
-    result.input.selectedPlatforms && result.input.selectedPlatforms.length > 0
-      ? result.input.selectedPlatforms
-      : ALL_TRAINABLE;
-  const unselected = ALL_TRAINABLE.filter((p) => !selected.includes(p));
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-12 sm:px-6 sm:py-16">
@@ -238,28 +227,8 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
           );
         })}
 
-        {/* Expansion: build the same pack for the platforms not selected */}
-        {unselected.length > 0 ? (
-          <section className="fade-up rounded-2xl border border-dashed border-border bg-muted/20 p-5">
-            <h2 className="text-sm font-semibold text-muted-foreground">{t.alsoBuildTitle}</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {unselected.map((p) => (
-                <Link
-                  key={p}
-                  href={`/results?data=${encodeFeedPackInput({
-                    ...result.input,
-                    selectedPlatforms: [...selected, p],
-                  })}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-4 py-2 text-sm font-medium text-muted-foreground backdrop-blur transition-all hover:-translate-y-0.5 hover:border-aqua/60 hover:text-foreground hover:shadow-md hover:shadow-aqua/20"
-                >
-                  <PlatformIcon platform={p} className="size-4" branded />
-                  {t.forPlatformLabel.replace("{p}", PLATFORM_LABELS[p])}
-                  <Plus className="size-3.5 opacity-60" />
-                </Link>
-              ))}
-            </div>
-          </section>
-        ) : null}
+        {/* Optional expansion: build the same pack for unselected platforms */}
+        <PlatformExpansionButtons input={result.input} />
 
         {/* Mute keywords */}
         {result.muteKeywords.length > 0 ? (

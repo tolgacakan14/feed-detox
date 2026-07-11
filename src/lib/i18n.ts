@@ -55,6 +55,9 @@ export interface Dict {
   packsTitle: string;
   packsSeeAll: string;
   openPack: string;
+  // /packs page
+  packsPageTitle: string;
+  packsPageDesc: string;
   // Early access
   earlyTitle: string;
   earlyDesc: string;
@@ -145,6 +148,8 @@ export const translations: Record<UiLang, Dict> = {
     packsTitle: "Start from a ready-made pack",
     packsSeeAll: "See all sample packs →",
     openPack: "Open this pack",
+    packsPageTitle: "Ready-made Feed Packs",
+    packsPageDesc: "Not sure where to start? Open one of these to see what Feed Detox builds.",
     earlyTitle: "Get early access",
     earlyDesc:
       "Real-time creator ranking, verified profiles and weekly Feed Pack refreshes are coming. Be first in line.",
@@ -213,7 +218,7 @@ export const translations: Record<UiLang, Dict> = {
     muteTitle: "Mute edilecek keyword’ler",
     planTitle: "7 günlük algorithm training plan",
     another: "Yeni Feed Pack oluştur",
-    alsoBuildTitle: "Bu Feed Pack’i şunlar için de oluştur:",
+    alsoBuildTitle: "Bu Feed Pack’i diğer platformlar için de oluştur",
     forPlatformLabel: "{p} için",
     explainer:
       "Feed Detox, platformlara verdiğin signal’ları iyileştirerek çalışır. Daha iyi creator’ları takip et, kaliteli content’leri izle/kaydet ve düşük değerli keyword’leri mute et.",
@@ -231,6 +236,8 @@ export const translations: Record<UiLang, Dict> = {
     packsTitle: "Hazır bir pack ile başla",
     packsSeeAll: "Tüm sample pack’leri gör →",
     openPack: "Bu pack’i aç",
+    packsPageTitle: "Hazır Feed Pack’ler",
+    packsPageDesc: "Nereden başlayacağından emin değil misin? Feed Detox’un ne oluşturduğunu görmek için birini aç.",
     earlyTitle: "Early access al",
     earlyDesc:
       "Real-time creator ranking, verified profile’lar ve haftalık Feed Pack yenilemeleri geliyor. İlk sırada ol.",
