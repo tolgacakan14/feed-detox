@@ -3,6 +3,11 @@ import type { TrainablePlatform } from "@/types";
 
 const VALID_PLATFORMS = new Set<TrainablePlatform>(["x", "instagram", "tiktok", "youtube"]);
 
+/** Longest topic that still makes sense as a feed-training prompt — anything
+ * beyond this is either an accident or abuse, and would flow uncapped into
+ * search queries and ranking regexes. */
+const MAX_TOPIC_LENGTH = 200;
+
 /**
  * POST /api/feedpack  { topic: string, uiLang?: "en" | "tr", selectedPlatforms?: string[] }
  * Returns a structured Feed Pack (same engine the /results page uses).
@@ -11,7 +16,10 @@ const VALID_PLATFORMS = new Set<TrainablePlatform>(["x", "instagram", "tiktok", 
  */
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  const topic = typeof body?.topic === "string" ? body.topic.trim() : "";
+  const topic =
+    typeof body?.topic === "string"
+      ? body.topic.replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, MAX_TOPIC_LENGTH)
+      : "";
   if (!topic) {
     return Response.json({ error: "topic is required" }, { status: 400 });
   }
@@ -20,11 +28,18 @@ export async function POST(request: Request) {
         (p: unknown): p is TrainablePlatform => typeof p === "string" && VALID_PLATFORMS.has(p as TrainablePlatform),
       )
     : [];
-  const result = await generateFeedPack({
-    prompt: topic,
-    pills: [],
-    uiLang: body?.uiLang === "tr" ? "tr" : "en",
-    selectedPlatforms,
-  });
-  return Response.json(result);
+  try {
+    const result = await generateFeedPack({
+      prompt: topic,
+      pills: [],
+      uiLang: body?.uiLang === "tr" ? "tr" : "en",
+      selectedPlatforms,
+    });
+    return Response.json(result);
+  } catch (err) {
+    // Providers are fail-soft, so this is the unexpected path — return a
+    // clean JSON error instead of a framework 500 page.
+    console.error("feedpack generation failed:", err);
+    return Response.json({ error: "generation failed" }, { status: 500 });
+  }
 }

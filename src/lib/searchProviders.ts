@@ -120,8 +120,7 @@ function mockProvider(): WebProvider {
   ];
   return {
     name: "mock",
-    search: async (q) =>
-      FIXTURES.filter((f) => !q || true).map((f) => ({ ...f })), // topic-agnostic fixture, dev only
+    search: async () => FIXTURES.map((f) => ({ ...f })), // topic-agnostic fixture, dev only
   };
 }
 

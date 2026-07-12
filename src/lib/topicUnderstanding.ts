@@ -204,9 +204,13 @@ function detectLanguage(text: string): "en" | "tr" {
   return TR_CHARS.test(text) || TR_WORDS.test(text) ? "tr" : "en";
 }
 
+// Platform intent triggers ONLY on unambiguous platform names — content-type
+// words like "shorts"/"reels" are topics in their own right ("cargo shorts",
+// "fishing reels") and must never silently drop the other platforms. They
+// still feed qualityIntent.wantsShorts below for within-platform ranking.
 const PLATFORM_PATTERNS: [TrainablePlatform, RegExp][] = [
-  ["youtube", /\b(youtube|yt|shorts)\b/i],
-  ["instagram", /\b(instagram|insta|ig|reels?)\b/i],
+  ["youtube", /\b(youtube|yt)\b/i],
+  ["instagram", /\b(instagram|insta|ig)\b/i],
   ["tiktok", /\btiktok\b/i],
   ["x", /\btwitter\b|(?:^|[\s,])x(?:[\s,]|$)/i],
 ];

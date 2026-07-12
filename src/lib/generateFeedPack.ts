@@ -81,6 +81,10 @@ function parsePrompt(prompt: string, pills: string[]) {
   let wantsNoPoliticsFromText = false;
 
   const segments = prompt
+    // Turkish dotted capital İ lowercases to "i" + a combining dot in plain
+    // toLowerCase(), which then never matches any keyword ("ANALİZİ" →
+    // "anali̇zi̇"). Map it first — İ exists only in Turkish, so this is safe.
+    .replace(/İ/g, "i")
     .toLowerCase()
     .split(/[,;.\n]|\band\b|\bve\b/)
     .map((s) => s.trim())
@@ -442,7 +446,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
   sections.discovery = sections.discovery.slice(0, SECTION_CAPS.discovery);
 
   (Object.keys(sections) as SectionKey[]).forEach((k) => {
-    sections[k] = sections[k]
+    const finalized = sections[k]
       .map((it) => finalizeFeedPackItem(it, ctx, input.uiLang))
       // Anti-hallucination completeness guard: a card missing a required
       // field shouldn't reach the UI, even though finalize should always
@@ -450,6 +454,17 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
       .filter(
         (r) => r.title && r.url && r.whyItMatters && r.bestAction && r.noiseRisk && r.nicheLevel && r.freshness,
       );
+    // Two cards with the same visible title read as a glitch even when the
+    // URLs differ — common when several weak-metadata items collapse into
+    // the same fallback label at finalize. Keep the higher-ranked one; a
+    // section of 4 unique cards beats 5 with a visible duplicate.
+    const seenTitles = new Set<string>();
+    sections[k] = finalized.filter((r) => {
+      const key = r.title.trim().toLowerCase();
+      if (seenTitles.has(key)) return false;
+      seenTitles.add(key);
+      return true;
+    });
   });
 
   const all = Object.values(sections).flat();
@@ -530,7 +545,14 @@ export function decodeFeedPackInput(encoded: string): FeedPackInput | null {
           (ALL_TRAINABLE_PLATFORMS as string[]).includes(p),
         )
       : [];
-    return { ...parsed, uiLang: parsed.uiLang === "tr" ? "tr" : "en", selectedPlatforms };
+    return {
+      ...parsed,
+      // Same input-hygiene caps as the API route — the URL is user-editable.
+      prompt: parsed.prompt.replace(/[\u0000-\u001F\u007F]/g, " ").slice(0, 300),
+      pills: parsed.pills.filter((p): p is string => typeof p === "string").slice(0, 10),
+      uiLang: parsed.uiLang === "tr" ? "tr" : "en",
+      selectedPlatforms,
+    };
   } catch {
     return null;
   }

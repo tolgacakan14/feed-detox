@@ -17,6 +17,6 @@ export function trackEvent(
   eventName: AnalyticsEvent,
   payload: Record<string, unknown> = {},
 ): void {
-  // eslint-disable-next-line no-console
+   
   console.log(`[trackEvent] ${eventName}`, payload);
 }

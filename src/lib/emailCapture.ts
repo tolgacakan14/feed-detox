@@ -14,7 +14,7 @@ export async function saveEmailSignup(
   data: EmailCaptureData,
 ): Promise<{ success: boolean }> {
   inMemorySignups.push(data);
-  // eslint-disable-next-line no-console
+   
   console.log("[emailCapture] new signup", data);
   return { success: true };
 }
