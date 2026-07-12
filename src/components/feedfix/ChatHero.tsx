@@ -11,14 +11,17 @@ import { translations } from "@/lib/i18n";
 import { useLang } from "@/lib/langContext";
 import type { TrainablePlatform } from "@/types";
 
-const ALL_PLATFORMS: TrainablePlatform[] = ["x", "instagram", "youtube", "tiktok"];
-
 export function ChatHero() {
   const router = useRouter();
   const { lang, setLang } = useLang();
   const [prompt, setPrompt] = useState("");
   const [pills, setPills] = useState<string[]>([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<TrainablePlatform[]>(ALL_PLATFORMS);
+  // Starts EMPTY on purpose: tapping a platform SELECTS it (selectedPlatforms
+  // means "included platforms only"). Empty = no explicit choice = the engine
+  // defaults to all four. Pre-selecting all four made the first tap read as
+  // an inverted selection — tapping X deselected it and built a pack for
+  // every platform EXCEPT X.
+  const [selectedPlatforms, setSelectedPlatforms] = useState<TrainablePlatform[]>([]);
   const t = translations[lang];
 
   const canSubmit = prompt.trim().length > 0 || pills.length > 0;

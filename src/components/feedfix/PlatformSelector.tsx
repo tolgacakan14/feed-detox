@@ -20,7 +20,12 @@ export function PlatformSelector({
 
   return (
     <div className="flex flex-col items-center gap-2.5">
-      <p className="text-xs font-medium text-muted-foreground">{t.platformSelectorLabel}</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        {t.platformSelectorLabel}{" "}
+        {selected.length === 0 ? (
+          <span className="text-muted-foreground/70">{t.platformAllHint}</span>
+        ) : null}
+      </p>
       <div role="group" aria-label={t.platformSelectorLabel} className="flex flex-wrap justify-center gap-2">
         {TRAINABLE_PLATFORMS.map((platform) => {
           const isActive = selected.includes(platform);

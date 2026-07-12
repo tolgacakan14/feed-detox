@@ -75,10 +75,28 @@ function assertCardQuality(p) {
   check("no search fallback inside platform sections", !fallbackAboveDirect);
 }
 
+const VERIFIED_LABELS = ["Most viewed this week", "High engagement this week"];
+
+function assertSlotStructure(p, selected) {
+  for (const k of selected) {
+    const arr = p.sections[k] ?? [];
+    if (arr.length === 0) continue; // covered by the fallback check
+    const labeled = arr.filter((r) => r.slotLabel);
+    check(`${k}: cards carry 5-slot labels`, labeled.length >= Math.min(2, arr.length));
+    // Honesty rule: verified weekly wording requires a real view count from
+    // a week-scoped API query — never on estimated candidates.
+    const dishonest = arr.filter(
+      (r) => VERIFIED_LABELS.includes(r.slotLabel) && !(r.weeklyScoped && typeof r.viewCount === "number"),
+    );
+    check(`${k}: verified weekly labels only with real metrics`, dishonest.length === 0);
+  }
+}
+
 async function main() {
   console.log(`Smoke-testing ${BASE_URL}\n`);
 
   const cases = [
+    ["galatasaray + x ONLY (inversion regression)", { topic: "galatasaray", selectedPlatforms: ["x"] }],
     ["galatasaray + youtube", { topic: "galatasaray", selectedPlatforms: ["youtube"] }],
     ["galatasaray + x + instagram", { topic: "galatasaray", selectedPlatforms: ["x", "instagram"] }],
     ["ai tools + tiktok", { topic: "ai tools", selectedPlatforms: ["tiktok"] }],
@@ -91,6 +109,7 @@ async function main() {
     const p = await pack(body);
     assertPlatformIsolation(p, body.selectedPlatforms);
     assertCardQuality(p);
+    assertSlotStructure(p, body.selectedPlatforms);
   }
 
   console.log("no platform selected (defaults to all four):");

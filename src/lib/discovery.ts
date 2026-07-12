@@ -121,6 +121,12 @@ export interface RawSearchResult {
   title: string;
   url: string;
   snippet?: string;
+  /** Real provider metrics (YouTube Data API) — never estimated. */
+  viewCount?: number;
+  publishedAt?: string;
+  /** Tag set by the caller when the query was genuinely scoped to the last
+   * 7 days ordered by views — enables the verified weekly-top label. */
+  weeklyScoped?: boolean;
 }
 
 interface UrlClass {
@@ -372,16 +378,28 @@ export function extractDirectLinks(
         isDirectLink: true,
         snippet: raw.snippet,
         searchRank: index,
+        viewCount: raw.viewCount,
+        publishedAt: raw.publishedAt,
+        weeklyScoped: raw.weeklyScoped,
         popularitySignal:
-          origin === "api"
-            ? "YouTube API result"
-            : index < 3
-              ? "High-ranking search result"
-              : "Direct search result",
+          raw.viewCount !== undefined
+            ? `${formatViewCount(raw.viewCount)} views (YouTube API)`
+            : origin === "api"
+              ? "YouTube API result"
+              : index < 3
+                ? "High-ranking search result"
+                : "Direct search result",
         whyItMatters: buildWhyItMatters(cls.platform, cls.type, ctx),
       },
     ];
   });
+}
+
+/** 1234567 → "1.2M" — display formatting for REAL API view counts only. */
+export function formatViewCount(views: number): string {
+  if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (views >= 1_000) return `${(views / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(views);
 }
 
 /**
@@ -571,32 +589,66 @@ function watchQuality(r: DiscoveryResult, ctx: TopicContext): number {
 }
 
 /**
- * Quality signal: source trust (API/web-search/curated), confidence,
- * official-looking markers, and — for watchable content — watchQuality.
+ * Engagement signal: REAL view counts when the provider gave them
+ * (log-scaled — 10M+ views ≈ 1.0), curated engagement labels, cross-search
+ * repetition, then search rank as the weakest proxy. For watchable content
+ * without any metric, watchQuality stands in — a strong topic-central,
+ * non-clickbait video is a better engagement bet than a weak one.
  */
-export function calculateQualitySignal(r: DiscoveryResult, ctx: TopicContext): number {
+export function calculateEngagementSignal(r: DiscoveryResult, ctx: TopicContext): number {
+  if (typeof r.viewCount === "number") return Math.min(1, Math.log10(r.viewCount + 1) / 7);
+  if (r.engagementLabel) return ENGAGEMENT_SCORE[r.engagementLabel] ?? 0.5;
+  if (r.popularitySignal === "Appears across multiple social searches") return 0.85;
+  const rankProxy = r.searchRank !== undefined ? Math.max(0.35, 0.9 - r.searchRank * 0.07) : 0.45;
+  if (["reel", "video", "short", "post"].includes(r.type)) {
+    return Math.max(rankProxy, watchQuality(r, ctx) * 0.75);
+  }
+  return rankProxy;
+}
+
+/** Recency signal: real publish dates when available (day-bucketed decay),
+ * otherwise the qualitative freshness label. */
+export function calculateRecencySignal(r: DiscoveryResult): number {
+  if (r.publishedAt) {
+    const days = (Date.now() - Date.parse(r.publishedAt)) / 86400000;
+    if (Number.isFinite(days) && days >= 0) {
+      if (days <= 7) return 1;
+      if (days <= 30) return 0.8;
+      if (days <= 180) return 0.6;
+      if (days <= 720) return 0.4;
+      return 0.25;
+    }
+  }
+  return r.freshness ? FRESHNESS_SCORE[r.freshness] : 0.5;
+}
+
+/**
+ * Creator/source authority: origin trust (API > web search > curated data),
+ * confidence, official markers (name/handle matches the entity, "official"
+ * in the title), and the category's positive quality vocabulary in the bio.
+ */
+export function calculateCreatorAuthority(r: DiscoveryResult, ctx: TopicContext): number {
   const validity = CONFIDENCE_SCORE[r.confidence];
-  const authority = SOURCE_SCORE[r.source];
+  const source = SOURCE_SCORE[r.source];
   const title = r.title.toLowerCase();
   const handleSlug = r.handle?.toLowerCase().replace(/\W/g, "") ?? "";
   const looksOfficial =
     /\b(official|resmi)\b/.test(title) ||
     (handleSlug.length > 0 &&
       ctx.prioritizeEntities.some((e) => handleSlug.includes(e.replace(/\W/g, ""))));
-  let base = 0.45 * validity + 0.35 * authority + (looksOfficial ? 0.2 : 0.08);
+  let base = 0.4 * source + 0.35 * validity + (looksOfficial ? 0.2 : 0.06);
   // Positive category vocabulary in a profile's bio/snippet ("tactical
   // analysis", "curated") marks a quality source, not a spam page.
   if (ctx.positiveSignals.some((s) => `${title} ${(r.snippet ?? "").toLowerCase()}`.includes(s))) {
-    base = Math.min(base + 0.07, 1);
-  }
-  if (["reel", "video", "short", "post"].includes(r.type)) {
-    base = (base + watchQuality(r, ctx)) / 2;
+    base += 0.07;
   }
   return Math.min(base, 1);
 }
 
-/** Noise penalty (0–0.3): ragebait language, hashtag-stuffed titles, and the
- * category's characteristic spam vocabulary (negativeTerms). */
+/** Noise penalty (0–0.4): ragebait language, hashtag-stuffed titles, the
+ * category's characteristic spam vocabulary (negativeTerms), and — for
+ * watchable content — a weak watchQuality (clickbaity/generic/off-topic
+ * videos get pushed down even when nothing else flags them). */
 export function calculateNoisePenalty(r: DiscoveryResult, ctx: TopicContext): number {
   const hay = `${r.title} ${r.snippet ?? ""}`.toLowerCase();
   let penalty = 0;
@@ -604,7 +656,8 @@ export function calculateNoisePenalty(r: DiscoveryResult, ctx: TopicContext): nu
   const hashtagCount = (r.title.match(/#\w+/g) ?? []).length;
   if (hashtagCount >= 5) penalty += 0.12;
   if (ctx.negativeTerms.some((n) => hay.includes(n))) penalty += 0.12;
-  return Math.min(penalty, 0.3);
+  if (["reel", "video", "short"].includes(r.type) && watchQuality(r, ctx) < 0.35) penalty += 0.1;
+  return Math.min(penalty, 0.4);
 }
 
 /** Weak metadata penalty: too-short titles and honest fallback labels rank
@@ -634,15 +687,15 @@ export function detectUnrelatedEntity(r: DiscoveryResult, ctx: TopicContext): nu
 }
 
 /**
- * score = 0.35 topicRelevance + 0.20 directDestinationBonus
- *       + 0.15 platformFit + 0.15 qualitySignal
- *       + 0.10 freshnessSignal + 0.05 popularitySignal
+ * score = 0.35 topicRelevance + 0.20 engagementSignal + 0.15 recencySignal
+ *       + 0.15 creatorAuthority + 0.10 platformFit + 0.05 directDestination
  *       − noisePenalty − weakMetadataPenalty − unrelatedEntityPenalty
  *
- * Topic relevance leads — a perfectly "direct" result about the wrong
- * subject should never outrank a slightly-less-direct result that's
- * actually about the topic. Pass the full TopicContext for semantic
- * ranking (related terms, negative terms, quality intent); without it a
+ * Topic relevance leads — a perfectly popular result about the wrong
+ * subject should never outrank a slightly-less-popular result that's
+ * actually about the topic. Engagement and recency use REAL provider
+ * metrics (view counts, publish dates) when available and honest proxies
+ * when not. Pass the full TopicContext for semantic ranking; without it a
  * minimal context is built from topics/siblings.
  */
 export function scoreResult(
@@ -652,24 +705,13 @@ export function scoreResult(
   ctx?: TopicContext,
 ): number {
   const c = ctx ?? minimalContext(topics, siblings);
-  const freshness = r.freshness ? FRESHNESS_SCORE[r.freshness] : 0.5;
-  // Real popularity inputs when available: curated engagement labels, or for
-  // live-extracted results, search rank + cross-search repetition. Never a
-  // fabricated number — just ordering evidence we actually have.
-  const popularity = r.engagementLabel
-    ? (ENGAGEMENT_SCORE[r.engagementLabel] ?? 0.5)
-    : r.popularitySignal === "Appears across multiple social searches"
-      ? 0.9
-      : r.searchRank !== undefined
-        ? Math.max(0.4, 1 - r.searchRank * 0.08)
-        : 0.5;
   const score =
     0.35 * calculateTopicRelevance(r, c) +
-    0.2 * socialTier(r) +
-    0.15 * calculatePlatformFit(r, c) +
-    0.15 * calculateQualitySignal(r, c) +
-    0.1 * freshness +
-    0.05 * popularity -
+    0.2 * calculateEngagementSignal(r, c) +
+    0.15 * calculateRecencySignal(r) +
+    0.15 * calculateCreatorAuthority(r, c) +
+    0.1 * calculatePlatformFit(r, c) +
+    0.05 * socialTier(r) -
     calculateNoisePenalty(r, c) -
     calculateWeakMetadataPenalty(r) -
     detectUnrelatedEntity(r, c);

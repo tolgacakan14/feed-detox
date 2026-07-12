@@ -110,6 +110,18 @@ export interface DiscoveryResult {
   rankingReason?: string;
   /** Internal: 0-based rank in the search results it came from (ranking input). */
   searchRank?: number;
+  /** Real view count from a provider API (YouTube Data API statistics) —
+   * only ever set from actual API data, never estimated. */
+  viewCount?: number;
+  /** ISO publish date from a provider API — powers the recency signal. */
+  publishedAt?: string;
+  /** True only when the item came from a provider query genuinely scoped to
+   * the last 7 days ordered by views — required for the verified
+   * "Most viewed this week" label. */
+  weeklyScoped?: boolean;
+  /** 5-slot card structure label ("Most viewed this week", "Top creator",
+   * "Niche quality pick"). Verified wording only with real metrics. */
+  slotLabel?: string;
   // ── Curated demo signal metadata (optional) ──
   creatorName?: string;
   handle?: string;

@@ -85,6 +85,18 @@ function ResultCard({
         </div>
       </div>
 
+      {/* 5-slot structure label — verified wording only with real metrics */}
+      {result.slotLabel ? (
+        <p className="-mb-1 -mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-gradient">
+          {result.slotLabel}
+          {result.viewCount !== undefined && result.popularitySignal?.includes("views") ? (
+            <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted-foreground">
+              · {result.popularitySignal.replace(" (YouTube API)", "")}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+
       {/* Main: title + what it is + why it matters */}
       <div>
         <h3 className="font-heading text-base font-semibold leading-tight">

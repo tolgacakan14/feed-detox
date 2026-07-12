@@ -21,6 +21,17 @@ export interface SearchResult {
   url: string;
   snippet?: string;
   source: "serpapi" | "tavily" | "bing" | "google_cse" | "youtube_api" | "mock";
+  /** Real metrics — only ever set from actual API responses (YouTube Data
+   * API statistics/snippet), never estimated. */
+  viewCount?: number;
+  publishedAt?: string;
+}
+
+/** YouTube-only search options: order by view count and/or restrict to the
+ * last N days — the honest basis for "most viewed this week" cards. */
+export interface YoutubeSearchOptions {
+  order?: "viewCount" | "date" | "relevance";
+  publishedAfterDays?: number;
 }
 
 const TIMEOUT_MS = 6000;
@@ -137,18 +148,36 @@ function getWebProvider(): WebProvider | null {
 
 // ── YouTube Data API (direct videos/channels, real metadata) ───────────────
 
-async function youtubeSearch(query: string, limit: number): Promise<SearchResult[]> {
+async function youtubeSearch(
+  query: string,
+  limit: number,
+  opts: YoutubeSearchOptions = {},
+): Promise<SearchResult[]> {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) return [];
+  const params = new URLSearchParams({
+    part: "snippet",
+    maxResults: String(limit),
+    type: opts.order === "viewCount" || opts.order === "date" ? "video" : "video,channel",
+    q: query,
+    key,
+  });
+  if (opts.order) params.set("order", opts.order);
+  if (opts.publishedAfterDays) {
+    params.set(
+      "publishedAfter",
+      new Date(Date.now() - opts.publishedAfterDays * 86400000).toISOString(),
+    );
+  }
   const data = (await fetchJson(
-    `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=${limit}&type=video,channel&q=${encodeURIComponent(query)}&key=${key}`,
+    `https://www.googleapis.com/youtube/v3/search?${params.toString()}`,
   )) as {
     items?: {
       id: { kind: string; videoId?: string; channelId?: string };
-      snippet: { title: string; description?: string; channelTitle?: string };
+      snippet: { title: string; description?: string; channelTitle?: string; publishedAt?: string };
     }[];
   };
-  return (data.items ?? []).flatMap((item) => {
+  const results: (SearchResult & { videoId?: string })[] = (data.items ?? []).flatMap((item) => {
     const url = item.id.videoId
       ? `https://www.youtube.com/watch?v=${item.id.videoId}`
       : item.id.channelId
@@ -168,8 +197,36 @@ async function youtubeSearch(query: string, limit: number): Promise<SearchResult
         url,
         snippet,
         source: "youtube_api" as const,
+        publishedAt: item.snippet.publishedAt,
+        videoId: item.id.videoId,
       },
     ];
+  });
+
+  // Enrich with REAL view counts in one batched videos.list call (1 quota
+  // unit vs 100 for the search itself). Fail-soft: results without stats
+  // are still returned, they just don't get verified-engagement labels.
+  const videoIds = results.map((r) => r.videoId).filter(Boolean) as string[];
+  if (videoIds.length > 0) {
+    try {
+      const stats = (await fetchJson(
+        `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds.join(",")}&key=${key}`,
+      )) as { items?: { id: string; statistics?: { viewCount?: string } }[] };
+      const viewsById = new Map(
+        (stats.items ?? []).map((v) => [v.id, Number(v.statistics?.viewCount)]),
+      );
+      for (const r of results) {
+        const views = r.videoId ? viewsById.get(r.videoId) : undefined;
+        if (views !== undefined && Number.isFinite(views)) r.viewCount = views;
+      }
+    } catch {
+      // stats unavailable — keep the un-enriched results
+    }
+  }
+  return results.map((r) => {
+    const { videoId, ...rest } = r;
+    void videoId; // internal join key only — not part of the public shape
+    return rest;
   });
 }
 
@@ -189,13 +246,14 @@ export async function searchSocial(
   query: string,
   platform: "x" | "instagram" | "tiktok" | "youtube" | "web",
   limit = 8,
+  youtubeOpts?: YoutubeSearchOptions,
 ): Promise<SearchResult[]> {
   try {
     if (platform === "youtube") {
       // Own try/catch: a YouTube API failure (quota exhausted, network)
       // must fall through to web search, not kill the whole call.
       try {
-        const yt = await youtubeSearch(query, limit);
+        const yt = await youtubeSearch(query, limit, youtubeOpts);
         if (yt.length > 0) return yt;
       } catch {
         // fall through to the web provider below

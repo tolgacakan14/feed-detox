@@ -3,6 +3,8 @@ import { matchCurated } from "@/data/curatedSources";
 import { analyzeTopics, type TopicIntel } from "@/lib/topicIntel";
 import { understandTopic, type TopicContext } from "@/lib/topicUnderstanding";
 import {
+  calculateCreatorAuthority,
+  calculateEngagementSignal,
   dedupeByUrl,
   extractDirectLinks,
   filterLowQuality,
@@ -179,27 +181,93 @@ const PROFILE_TYPES = new Set(["account", "creator", "channel"]);
 const CONTENT_TYPES = new Set(["post", "reel", "video", "short"]);
 const PLATFORM_KEYS: SectionKey[] = ["x", "instagram", "tiktok", "youtube"];
 
+/** Distinct-creator key for slots 3–4: handle, curated creator name, or the
+ * channel-name prefix the YouTube extractor puts on snippets. */
+function creatorKey(r: DiscoveryResult): string {
+  return (r.handle ?? r.creatorName ?? r.snippet?.split("—")[0] ?? r.title)
+    .toLowerCase()
+    .trim();
+}
+
 /**
- * Healthy section mix: when a platform has BOTH profiles and watchable
- * content, the top-5 shouldn't be all-videos (weak metadata risk) or
- * all-profiles (nothing to watch right now) — take the 1–2 best profiles
- * plus the 2–4 best content items, then fill any remaining slots by score.
- * Sections with only one kind just take the top-scored items as before.
+ * Structured 5-card composition per selected platform:
+ *   1–2  highest-engagement content ("Most viewed this week" ONLY when the
+ *        item came from a genuinely week-scoped, view-ordered API query
+ *        with a real view count; estimated candidates get honest
+ *        "Weekly top-style signal" / "High-engagement candidate" labels)
+ *   3–4  top-authority creators/sources, distinct creators
+ *   5    niche quality pick (real niche markers only)
+ * Remaining slots fill by overall score. Cards keep slot order — the
+ * structure IS the story the section tells.
  */
-function mixSection(sorted: DiscoveryResult[], cap: number): DiscoveryResult[] {
-  const profiles = sorted.filter((r) => PROFILE_TYPES.has(r.type));
-  const contents = sorted.filter((r) => CONTENT_TYPES.has(r.type));
-  if (profiles.length === 0 || contents.length === 0) return sorted.slice(0, cap);
-  const picked = new Set<DiscoveryResult>(profiles.slice(0, 2));
-  for (const c of contents) {
-    if (picked.size >= cap) break;
-    picked.add(c);
+function composeSlots(sorted: DiscoveryResult[], cap: number, ctx: TopicContext): DiscoveryResult[] {
+  if (sorted.length === 0) return [];
+  const used = new Set<DiscoveryResult>();
+  const out: DiscoveryResult[] = [];
+
+  // Slots 1–2: engagement leaders among watchable content.
+  const byEngagement = sorted
+    .filter((r) => CONTENT_TYPES.has(r.type))
+    .sort(
+      (a, b) =>
+        calculateEngagementSignal(b, ctx) - calculateEngagementSignal(a, ctx),
+    );
+  byEngagement.slice(0, 2).forEach((item, i) => {
+    const weeklyVerified = item.weeklyScoped && typeof item.viewCount === "number";
+    const slotLabel = weeklyVerified
+      ? i === 0
+        ? "Most viewed this week"
+        : "High engagement this week"
+      : typeof item.viewCount === "number"
+        ? "High engagement"
+        : i === 0
+          ? "Weekly top-style signal"
+          : "High-engagement candidate";
+    out.push({ ...item, slotLabel });
+    used.add(item);
+  });
+
+  // Slots 3–4: top authority sources, distinct creators.
+  const byAuthority = sorted
+    .filter((r) => !used.has(r))
+    .sort((a, b) => calculateCreatorAuthority(b, ctx) - calculateCreatorAuthority(a, ctx));
+  const pickedCreators = new Set(out.map(creatorKey));
+  let creatorSlots = 0;
+  for (const item of byAuthority) {
+    if (creatorSlots >= 2 || out.length >= cap) break;
+    const key = creatorKey(item);
+    if (pickedCreators.has(key)) continue;
+    out.push({
+      ...item,
+      slotLabel: PROFILE_TYPES.has(item.type) ? "Top creator" : "Latest from top creator",
+    });
+    used.add(item);
+    pickedCreators.add(key);
+    creatorSlots += 1;
   }
-  for (const r of sorted) {
-    if (picked.size >= cap) break;
-    picked.add(r);
+
+  // Slot 5: niche quality pick — only with a real niche marker, never faked.
+  const niche = sorted.find(
+    (r) =>
+      !used.has(r) &&
+      (r.popularity === "niche" ||
+        r.engagementLabel === "Niche quality" ||
+        (CONTENT_TYPES.has(r.type) && typeof r.viewCount === "number" && r.viewCount < 50_000)),
+  );
+  if (niche && out.length < cap) {
+    out.push({ ...niche, slotLabel: "Niche quality pick" });
+    used.add(niche);
   }
-  return sorted.filter((r) => picked.has(r)); // display order stays by score
+
+  // Fill any remaining slots by overall score.
+  for (const item of sorted) {
+    if (out.length >= cap) break;
+    if (!used.has(item)) {
+      out.push(item);
+      used.add(item);
+    }
+  }
+  return out;
 }
 
 /** Route each item to its own platform's section. Search/discovery pages
@@ -224,7 +292,7 @@ function groupResults(items: DiscoveryResult[], ctx: TopicContext) {
         scoreResult(a, ctx.topics, ctx.avoidEntities, ctx),
     );
     buckets[k] = PLATFORM_KEYS.includes(k)
-      ? mixSection(sorted, SECTION_CAPS[k])
+      ? composeSlots(sorted, SECTION_CAPS[k], ctx)
       : sorted.slice(0, SECTION_CAPS[k]);
   });
   return buckets;
@@ -390,6 +458,21 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     // YouTube goes through the Data API when keyed (real engagement-backed
     // results); otherwise the same site:-scoped web search.
     if (selectedPlatforms.has("youtube")) {
+      // Weekly-top query: genuinely scoped to the last 7 days, ordered by
+      // view count — the honest evidence behind a "Most viewed this week"
+      // card. Only API-sourced hits keep the weekly tag; the web-search
+      // fallback can't honor order/date scoping.
+      calls.push(
+        searchSocial(t, "youtube", 8, { order: "viewCount", publishedAfterDays: 7 }).then(
+          (hits) =>
+            extractDirectLinks(
+              hits.map((h) => (h.source === "youtube_api" ? { ...h, weeklyScoped: true } : h)),
+              hits.some((h) => h.source === "youtube_api") ? "api" : "web_search",
+              true,
+              ctx,
+            ),
+        ),
+      );
       intel.platformQueries.youtube.slice(0, 2).forEach((query) => {
         calls.push(
           searchSocial(query, "youtube").then((hits) =>

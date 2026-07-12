@@ -21,6 +21,7 @@ export interface Dict {
   noConnect: string; // "we don't connect to your accounts" line
   // Platform selection (directly under the topic input)
   platformSelectorLabel: string;
+  platformAllHint: string; // shown when nothing is selected (= all four)
   platformActions: Record<TrainablePlatform, [string, string, string, string]>;
   // How it works
   howTitle: string;
@@ -80,6 +81,7 @@ export const translations: Record<UiLang, Dict> = {
     noConnect:
       "We don’t connect to your accounts. You stay in control — Feed Detox just gives you better signals to open.",
     platformSelectorLabel: "Choose the platforms you want to train.",
+    platformAllHint: "(none selected = all four)",
     platformActions: {
       x: [
         "Follow high-signal creators",
@@ -168,6 +170,7 @@ export const translations: Record<UiLang, Dict> = {
     noConnect:
       "Hesaplarına bağlanmıyoruz. Kontrol sende — Feed Detox sana sadece açman için daha iyi signal’lar verir.",
     platformSelectorLabel: "Eğitmek istediğin platformları seç.",
+    platformAllHint: "(seçim yoksa dördü de dahil)",
     platformActions: {
       x: [
         "High-signal creator’ları takip et",
