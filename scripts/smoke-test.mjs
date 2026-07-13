@@ -126,6 +126,42 @@ async function main() {
     PLATFORMS.filter((k) => (shorts.sections[k] ?? []).length > 0 || (shorts.sections.discovery ?? []).some((d) => d.platform === k)).length >= 3,
   );
 
+  console.log("mood layer:");
+  const deepDive = await pack({
+    topic: "galatasaray",
+    selectedPlatforms: ["youtube"],
+    selectedMoods: ["deepDive", "noDrama"],
+  });
+  const ddItems = deepDive.sections.youtube ?? [];
+  check(
+    "Deep Dive: mood clause in explanations",
+    ddItems.some((r) => r.whyItMatters.includes("Because you selected Deep Dive")),
+  );
+  check(
+    "Deep Dive: top-2 slots are not Shorts",
+    ddItems.slice(0, 2).every((r) => r.type !== "short"),
+  );
+  const focus = await pack({ topic: "ai tools", selectedPlatforms: ["tiktok"], selectedMoods: ["focus"] });
+  check(
+    "Focus: mood clause in explanations",
+    (focus.sections.tiktok ?? []).some((r) => r.whyItMatters.includes("Because you selected Focus")),
+  );
+  const calm = await pack({
+    topic: "deep house",
+    selectedPlatforms: ["youtube", "tiktok"],
+    selectedMoods: ["calm", "discovery"],
+  });
+  assertPlatformIsolation(calm, ["youtube", "tiktok"]);
+  check(
+    "Calm+Discovery: mood clause present",
+    ["youtube", "tiktok"].some((k) => (calm.sections[k] ?? []).some((r) => r.whyItMatters.includes("Because you selected"))),
+  );
+  const noMood = await pack({ topic: "galatasaray", selectedPlatforms: ["youtube"] });
+  check(
+    "no moods selected: no mood clauses appear",
+    PLATFORMS.flatMap((k) => noMood.sections[k] ?? []).every((r) => !r.whyItMatters.includes("Because you selected")),
+  );
+
   console.log("turkish pack:");
   const tr = await pack({ topic: "galatasaray", uiLang: "tr", selectedPlatforms: ["youtube", "x"] });
   const trJson = JSON.stringify(tr);

@@ -1,5 +1,5 @@
 import { analyzeTopics, getSiblingEntities } from "@/lib/topicIntel";
-import type { TrainablePlatform } from "@/types";
+import type { FeedMood, TrainablePlatform } from "@/types";
 
 /**
  * Topic Understanding layer — turns the raw prompt/topics into a semantic
@@ -45,7 +45,77 @@ export interface TopicContext {
   prioritizeEntities: string[];
   /** Same-category rival/sibling entities — title-leading matches get demoted. */
   avoidEntities: string[];
+  /** Selected feed moods — modify (never replace) the topic. */
+  moods: FeedMood[];
+  /** Combined positive vocabulary of the selected moods — moodFit boost. */
+  moodPositive: string[];
+  /** Combined negative vocabulary — mood mismatch penalty. */
+  moodNegative: string[];
 }
+
+// ── Mood profiles ───────────────────────────────────────────────────────────
+// Each mood carries the vocabulary that marks content matching (positive)
+// or clashing with (negative) that emotional direction. Vocabulary is
+// intentionally generic — it works for any topic, the topic layer above
+// supplies the subject.
+
+export const FEED_MOODS: FeedMood[] = [
+  "comedy",
+  "motivation",
+  "calm",
+  "focus",
+  "inspiration",
+  "deepDive",
+  "noDrama",
+  "discovery",
+];
+
+/** Display labels — English in BOTH languages per product rule. */
+export const MOOD_LABELS: Record<FeedMood, string> = {
+  comedy: "Comedy",
+  motivation: "Motivation",
+  calm: "Calm",
+  focus: "Focus",
+  inspiration: "Inspiration",
+  deepDive: "Deep Dive",
+  noDrama: "No Drama",
+  discovery: "Discovery",
+};
+
+const MOOD_PROFILES: Record<FeedMood, { positive: string[]; negative: string[] }> = {
+  comedy: {
+    positive: ["funny", "humor", "comedy", "light", "entertaining", "sketch", "parody"],
+    negative: ["toxic", "ragebait", "heavy drama", "beef", "fight"],
+  },
+  motivation: {
+    positive: ["motivational", "progress", "discipline", "success story", "training", "self-improvement", "career growth", "journey"],
+    negative: ["doom", "negativity", "drama", "blackpill"],
+  },
+  calm: {
+    positive: ["calm", "soft", "relaxing", "slow", "peaceful", "ambient", "chill", "smooth"],
+    negative: ["shouting", "ragebait", "conflict", "drama", "screaming", "vs"],
+  },
+  focus: {
+    positive: ["tutorial", "practical", "educational", "workflow", "productivity", "guide", "analysis", "how to"],
+    negative: ["distraction", "clickbait", "gossip", "viral moment", "prank"],
+  },
+  inspiration: {
+    positive: ["aesthetic", "creative", "ideas", "design", "aspirational", "beautiful", "craft", "process"],
+    negative: ["low-effort", "repost", "spam", "generic"],
+  },
+  deepDive: {
+    positive: ["analysis", "breakdown", "long-form", "thread", "documentary", "explainer", "tactical analysis", "detailed review", "deep dive", "in depth"],
+    negative: ["shallow", "generic", "quick drama", "in 30 seconds", "you won't believe"],
+  },
+  noDrama: {
+    positive: ["official", "reliable", "neutral", "educational", "constructive", "verified"],
+    negative: ["drama", "toxic", "fight", "beef", "rumor", "fake transfer", "ragebait", "betting", "exposed", "slams", "destroys"],
+  },
+  discovery: {
+    positive: ["niche", "emerging", "underground", "community", "independent", "curated", "hidden gem", "up and coming"],
+    negative: ["overexposed", "generic", "mass repost", "everyone is talking about"],
+  },
+};
 
 // ── Category profiles ───────────────────────────────────────────────────────
 // One profile per topicIntel type. `related` expands the topic into the
@@ -220,8 +290,18 @@ const PLATFORM_PATTERNS: [TrainablePlatform, RegExp][] = [
 const PLATFORM_TOKEN =
   /\b(on\s+)?(youtube|yt|instagram|insta|tiktok|twitter)\b/gi;
 
-export function understandTopic(rawTopics: string[], prompt: string): TopicContext {
+export function understandTopic(
+  rawTopics: string[],
+  prompt: string,
+  moods: FeedMood[] = [],
+): TopicContext {
   const haystack = `${prompt} ${rawTopics.join(" ")}`;
+  const moodPositive = Array.from(
+    new Set(moods.flatMap((m) => MOOD_PROFILES[m]?.positive ?? [])),
+  );
+  const moodNegative = Array.from(
+    new Set(moods.flatMap((m) => MOOD_PROFILES[m]?.negative ?? [])),
+  );
 
   const platformIntent = PLATFORM_PATTERNS.filter(([, re]) => re.test(haystack)).map(
     ([p]) => p,
@@ -260,5 +340,8 @@ export function understandTopic(rawTopics: string[], prompt: string): TopicConte
     platformIntent,
     prioritizeEntities: [normalizedTopic, ...aliases],
     avoidEntities: getSiblingEntities(cleanedTopics),
+    moods,
+    moodPositive,
+    moodNegative,
   };
 }

@@ -1,7 +1,9 @@
 import { generateFeedPack } from "@/lib/generateFeedPack";
-import type { TrainablePlatform } from "@/types";
+import { FEED_MOODS } from "@/lib/topicUnderstanding";
+import type { FeedMood, TrainablePlatform } from "@/types";
 
 const VALID_PLATFORMS = new Set<TrainablePlatform>(["x", "instagram", "tiktok", "youtube"]);
+const VALID_MOODS = new Set<FeedMood>(FEED_MOODS);
 
 /** Longest topic that still makes sense as a feed-training prompt — anything
  * beyond this is either an accident or abuse, and would flow uncapped into
@@ -28,12 +30,18 @@ export async function POST(request: Request) {
         (p: unknown): p is TrainablePlatform => typeof p === "string" && VALID_PLATFORMS.has(p as TrainablePlatform),
       )
     : [];
+  const selectedMoods: FeedMood[] = Array.isArray(body?.selectedMoods)
+    ? body.selectedMoods.filter(
+        (m: unknown): m is FeedMood => typeof m === "string" && VALID_MOODS.has(m as FeedMood),
+      )
+    : [];
   try {
     const result = await generateFeedPack({
       prompt: topic,
       pills: [],
       uiLang: body?.uiLang === "tr" ? "tr" : "en",
       selectedPlatforms,
+      selectedMoods,
     });
     return Response.json(result);
   } catch (err) {

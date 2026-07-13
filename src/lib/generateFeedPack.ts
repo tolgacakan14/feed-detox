@@ -1,10 +1,11 @@
 import { matchFeedSources } from "@/data/feedSources";
 import { matchCurated } from "@/data/curatedSources";
 import { analyzeTopics, type TopicIntel } from "@/lib/topicIntel";
-import { understandTopic, type TopicContext } from "@/lib/topicUnderstanding";
+import { FEED_MOODS, understandTopic, type TopicContext } from "@/lib/topicUnderstanding";
 import {
   calculateCreatorAuthority,
   calculateEngagementSignal,
+  calculateMoodFit,
   dedupeByUrl,
   extractDirectLinks,
   filterLowQuality,
@@ -22,6 +23,7 @@ import { validateResults } from "@/lib/validateUrl";
 import type {
   DayPlanItem,
   DiscoveryResult,
+  FeedMood,
   FeedPackInput,
   FeedPackResult,
   SectionKey,
@@ -205,13 +207,19 @@ function composeSlots(sorted: DiscoveryResult[], cap: number, ctx: TopicContext)
   const used = new Set<DiscoveryResult>();
   const out: DiscoveryResult[] = [];
 
-  // Slots 1–2: engagement leaders among watchable content.
-  const byEngagement = sorted
-    .filter((r) => CONTENT_TYPES.has(r.type))
-    .sort(
-      (a, b) =>
-        calculateEngagementSignal(b, ctx) - calculateEngagementSignal(a, ctx),
-    );
+  // Slots 1–2: engagement leaders among watchable content. Mood changes
+  // what qualifies as "best": with moods selected, moodFit co-ranks the
+  // candidates, and Deep Dive drops Shorts from the top slots entirely
+  // when longer-form alternatives exist.
+  let engagementPool = sorted.filter((r) => CONTENT_TYPES.has(r.type));
+  if (ctx.moods.includes("deepDive")) {
+    const longForm = engagementPool.filter((r) => r.type !== "short" && r.type !== "reel");
+    if (longForm.length >= 2) engagementPool = longForm;
+  }
+  const slotRank = (r: DiscoveryResult) =>
+    calculateEngagementSignal(r, ctx) +
+    (ctx.moods.length > 0 ? 0.6 * calculateMoodFit(r, ctx) : 0);
+  const byEngagement = engagementPool.sort((a, b) => slotRank(b) - slotRank(a));
   byEngagement.slice(0, 2).forEach((item, i) => {
     const weeklyVerified = item.weeklyScoped && typeof item.viewCount === "number";
     const slotLabel = weeklyVerified
@@ -246,13 +254,16 @@ function composeSlots(sorted: DiscoveryResult[], cap: number, ctx: TopicContext)
     creatorSlots += 1;
   }
 
-  // Slot 5: niche quality pick — only with a real niche marker, never faked.
+  // Slot 5: niche quality pick — only with a real niche marker, never
+  // faked. With Discovery mood, the niche gate widens (that's the point
+  // of the mood) so slot 5 gets especially strong.
+  const nicheViewCeiling = ctx.moods.includes("discovery") ? 200_000 : 50_000;
   const niche = sorted.find(
     (r) =>
       !used.has(r) &&
       (r.popularity === "niche" ||
         r.engagementLabel === "Niche quality" ||
-        (CONTENT_TYPES.has(r.type) && typeof r.viewCount === "number" && r.viewCount < 50_000)),
+        (CONTENT_TYPES.has(r.type) && typeof r.viewCount === "number" && r.viewCount < nicheViewCeiling)),
   );
   if (niche && out.length < cap) {
     out.push({ ...niche, slotLabel: "Niche quality pick" });
@@ -406,9 +417,10 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
 
   // Semantic topic understanding: normalized topic, category, related and
   // negative vocabulary, quality/platform intent, entities to prioritize
-  // and avoid. Everything downstream (queries, ranking, filtering, card
-  // copy) reads this one context.
-  const ctx = understandTopic(rawTopics, input.prompt);
+  // and avoid, plus the selected feed moods (mood modifies the topic,
+  // never replaces it). Everything downstream (queries, ranking,
+  // filtering, card copy) reads this one context.
+  const ctx = understandTopic(rawTopics, input.prompt, input.selectedMoods ?? []);
   const topics = ctx.topics;
   const intel = analyzeTopics(topics);
   const t = intel.mainTopic;
@@ -628,6 +640,9 @@ export function decodeFeedPackInput(encoded: string): FeedPackInput | null {
           (ALL_TRAINABLE_PLATFORMS as string[]).includes(p),
         )
       : [];
+    const selectedMoods = Array.isArray(parsed.selectedMoods)
+      ? parsed.selectedMoods.filter((m): m is FeedMood => (FEED_MOODS as string[]).includes(m))
+      : [];
     return {
       ...parsed,
       // Same input-hygiene caps as the API route — the URL is user-editable.
@@ -635,6 +650,7 @@ export function decodeFeedPackInput(encoded: string): FeedPackInput | null {
       pills: parsed.pills.filter((p): p is string => typeof p === "string").slice(0, 10),
       uiLang: parsed.uiLang === "tr" ? "tr" : "en",
       selectedPlatforms,
+      selectedMoods,
     };
   } catch {
     return null;

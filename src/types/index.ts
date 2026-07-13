@@ -134,6 +134,19 @@ export interface DiscoveryResult {
   isDemo?: boolean;
 }
 
+/** How the user wants their feed to FEEL — modifies the topic, never
+ * replaces it. Influences ranking (moodFit / mood mismatch penalty),
+ * negative filters, and card explanations. */
+export type FeedMood =
+  | "comedy"
+  | "motivation"
+  | "calm"
+  | "focus"
+  | "inspiration"
+  | "deepDive"
+  | "noDrama"
+  | "discovery";
+
 export interface FeedPackInput {
   prompt: string; // free text: "Galatasaray, less transfer drama"
   pills: string[]; // selected quick pills, by label
@@ -141,6 +154,9 @@ export interface FeedPackInput {
   /** Platforms the user wants recommendations for. Empty/undefined means
    * "no explicit choice" — the generator then defaults to all four. */
   selectedPlatforms?: TrainablePlatform[];
+  /** Emotional direction for the pack ("Deep Dive", "No Drama", …).
+   * Empty/undefined = no mood shaping. */
+  selectedMoods?: FeedMood[];
 }
 
 export interface DayPlanItem {

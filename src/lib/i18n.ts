@@ -22,6 +22,9 @@ export interface Dict {
   // Platform selection (directly under the topic input)
   platformSelectorLabel: string;
   platformAllHint: string; // shown when nothing is selected (= all four)
+  // Mood selector (mood labels themselves stay English via MOOD_LABELS)
+  moodSelectorLabel: string;
+  moodHelper: string;
   platformActions: Record<TrainablePlatform, [string, string, string, string]>;
   // How it works
   howTitle: string;
@@ -82,6 +85,8 @@ export const translations: Record<UiLang, Dict> = {
       "We don’t connect to your accounts. You stay in control — Feed Detox just gives you better signals to open.",
     platformSelectorLabel: "Choose the platforms you want to train.",
     platformAllHint: "(none selected = all four)",
+    moodSelectorLabel: "Choose your feed mood",
+    moodHelper: "Shape the emotional direction of your recommendations.",
     platformActions: {
       x: [
         "Follow high-signal creators",
@@ -171,6 +176,8 @@ export const translations: Record<UiLang, Dict> = {
       "Hesaplarına bağlanmıyoruz. Kontrol sende — Feed Detox sana sadece açman için daha iyi signal’lar verir.",
     platformSelectorLabel: "Eğitmek istediğin platformları seç.",
     platformAllHint: "(seçim yoksa dördü de dahil)",
+    moodSelectorLabel: "Feed mood’unu seç",
+    moodHelper: "Önerilerin nasıl hissettirmesini istediğini seç.",
     platformActions: {
       x: [
         "High-signal creator’ları takip et",

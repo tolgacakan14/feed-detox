@@ -268,7 +268,60 @@ function deriveTitle(
  * content instead of transfer drama and rival bait." Falls back to
  * neutral nouns when no TopicContext is available.
  */
+/** One mood-aware follow-up sentence per mood — appended to the base
+ * explanation when that mood is selected. EN/TR, product terms English. */
+const MOOD_WHY: Record<string, { en: string; tr: string }> = {
+  comedy: {
+    en: "Because you selected Comedy, light topic-relevant content like this trains your feed to entertain without turning toxic.",
+    tr: "Comedy seçtiğin için bu tarz hafif, konuya bağlı content feed’ini toxic’e kaçmadan eğlenceli tutar.",
+  },
+  motivation: {
+    en: "Because you selected Motivation, progress-focused content like this pushes doom and drama out of your feed.",
+    tr: "Motivation seçtiğin için bu tarz progress odaklı content, feed’inden doom ve drama’yı uzaklaştırır.",
+  },
+  calm: {
+    en: "Because you selected Calm, low-noise content like this teaches your feed to stay peaceful instead of loud.",
+    tr: "Calm seçtiğin için bu tarz sakin content, feed’ine gürültü yerine düşük tempolu signal verir.",
+  },
+  focus: {
+    en: "Because you selected Focus, practical content like this steers your feed toward useful signal over distraction.",
+    tr: "Focus seçtiğin için bu tarz pratik content, feed’ini dikkat dağıtan şeyler yerine faydalı signal’a yönlendirir.",
+  },
+  inspiration: {
+    en: "Because you selected Inspiration, craft-and-ideas content like this raises the creative bar of your feed.",
+    tr: "Inspiration seçtiğin için bu tarz craft ve fikir odaklı content, feed’inin yaratıcı çıtasını yükseltir.",
+  },
+  deepDive: {
+    en: "Because you selected Deep Dive, this analysis-style content helps the algorithm learn you prefer context over quick drama.",
+    tr: "Deep Dive seçtiğin için bu analysis-style content, algorithm’e quick drama yerine daha bağlamlı içerik istediğini öğretir.",
+  },
+  noDrama: {
+    en: "Because you selected No Drama, this source gives your feed cleaner signals around the topic.",
+    tr: "No Drama seçtiğin için bu source, feed’ine daha temiz signal verir.",
+  },
+  discovery: {
+    en: "Because you selected Discovery, this niche source helps your feed move beyond the obvious accounts.",
+    tr: "Discovery seçtiğin için bu niche source, feed’ini obvious account’ların dışına taşır.",
+  },
+};
+
+/** The primary (first-selected) mood's follow-up sentence. */
+function moodClause(ctx: TopicContext | undefined, lang: "en" | "tr"): string {
+  if (!ctx || ctx.moods.length === 0) return "";
+  const clause = MOOD_WHY[ctx.moods[0]];
+  return clause ? ` ${lang === "tr" ? clause.tr : clause.en}` : "";
+}
+
 export function buildWhyItMatters(
+  platform: Platform,
+  type: DiscoveryResult["type"],
+  ctx?: TopicContext,
+  lang: "en" | "tr" = "en",
+): string {
+  return baseWhyItMatters(platform, type, ctx, lang) + moodClause(ctx, lang);
+}
+
+function baseWhyItMatters(
   platform: Platform,
   type: DiscoveryResult["type"],
   ctx?: TopicContext,
@@ -498,6 +551,9 @@ function minimalContext(topics: string[], siblings: string[]): TopicContext {
     platformIntent: [],
     prioritizeEntities: topics.map((t) => t.toLowerCase()),
     avoidEntities: siblings,
+    moods: [],
+    moodPositive: [],
+    moodNegative: [],
   };
 }
 
@@ -645,6 +701,53 @@ export function calculateCreatorAuthority(r: DiscoveryResult, ctx: TopicContext)
   return Math.min(base, 1);
 }
 
+/**
+ * Mood fit: how well the item matches the FEEL the user asked for.
+ * Neutral 0.6 when no moods are selected (ranking behaves as before);
+ * with moods, positive mood vocabulary in the title/snippet raises it and
+ * content-type preferences apply — Deep Dive favors long-form video/posts
+ * over Shorts, Comedy accepts short-form, Discovery favors niche markers.
+ */
+export function calculateMoodFit(r: DiscoveryResult, ctx: TopicContext): number {
+  if (ctx.moods.length === 0) return 0.6;
+  const hay = `${r.title} ${r.snippet ?? ""}`.toLowerCase();
+  let fit = 0.45; // baseline: not clashing is already acceptable
+  const positiveHits = ctx.moodPositive.filter((s) => hay.includes(s)).length;
+  fit += Math.min(positiveHits * 0.18, 0.45);
+  if (ctx.moods.includes("deepDive")) {
+    if (r.type === "short") fit -= 0.2; // shorts are the opposite of a deep dive
+    if (r.type === "video" || r.type === "post" || r.type === "article") fit += 0.1;
+  }
+  if (ctx.moods.includes("comedy") && ["short", "reel", "video"].includes(r.type)) {
+    fit += 0.05; // short-form is fine for comedy when topic-relevant
+  }
+  if (
+    ctx.moods.includes("discovery") &&
+    (r.popularity === "niche" ||
+      r.engagementLabel === "Niche quality" ||
+      (typeof r.viewCount === "number" && r.viewCount < 200_000))
+  ) {
+    fit += 0.15;
+  }
+  if (ctx.moods.includes("noDrama") && CONFIDENCE_SCORE[r.confidence] === 1) {
+    fit += 0.08; // verified/official sources are the No-Drama backbone
+  }
+  return Math.max(0, Math.min(fit, 1));
+}
+
+/** Mood mismatch penalty (0–0.3): the item's text hits the selected moods'
+ * negative vocabulary ("beef", "rumor", "exposed" for No Drama; "shallow",
+ * "quick drama" for Deep Dive; shouting/conflict words for Calm…). */
+export function calculateMoodMismatchPenalty(r: DiscoveryResult, ctx: TopicContext): number {
+  if (ctx.moods.length === 0) return 0;
+  const hay = `${r.title} ${r.snippet ?? ""}`.toLowerCase();
+  const hits = ctx.moodNegative.filter((s) => hay.includes(s)).length;
+  let penalty = Math.min(hits * 0.12, 0.25);
+  if (ctx.moods.includes("noDrama") && RAGEBAIT_PATTERN.test(hay)) penalty += 0.1;
+  if (ctx.moods.includes("calm") && RAGEBAIT_PATTERN.test(hay)) penalty += 0.08;
+  return Math.min(penalty, 0.3);
+}
+
 /** Noise penalty (0–0.4): ragebait language, hashtag-stuffed titles, the
  * category's characteristic spam vocabulary (negativeTerms), and — for
  * watchable content — a weak watchQuality (clickbaity/generic/off-topic
@@ -686,14 +789,26 @@ export function detectUnrelatedEntity(r: DiscoveryResult, ctx: TopicContext): nu
   return ctx.avoidEntities.some((s) => title.includes(s)) ? 0.25 : 0;
 }
 
+/** Content quality: creator/source authority blended with watchability for
+ * watchable content — the "is this actually good?" factor. */
+export function calculateContentQuality(r: DiscoveryResult, ctx: TopicContext): number {
+  const authority = calculateCreatorAuthority(r, ctx);
+  if (["reel", "video", "short", "post"].includes(r.type)) {
+    return 0.4 * authority + 0.6 * watchQuality(r, ctx);
+  }
+  return authority;
+}
+
 /**
- * score = 0.35 topicRelevance + 0.20 engagementSignal + 0.15 recencySignal
- *       + 0.15 creatorAuthority + 0.10 platformFit + 0.05 directDestination
+ * score = 0.30 topicRelevance + 0.15 platformFit + 0.15 directDestination
+ *       + 0.15 contentQuality + 0.15 moodFit
+ *       + 0.05 freshnessSignal + 0.05 popularitySignal
  *       − noisePenalty − weakMetadataPenalty − unrelatedEntityPenalty
+ *       − moodMismatchPenalty
  *
- * Topic relevance leads — a perfectly popular result about the wrong
- * subject should never outrank a slightly-less-popular result that's
- * actually about the topic. Engagement and recency use REAL provider
+ * Topic relevance still leads — mood MODIFIES the topic, never replaces
+ * it. moodFit is neutral (0.6) when no moods are selected, so mood-less
+ * packs rank exactly as before. Engagement and recency use REAL provider
  * metrics (view counts, publish dates) when available and honest proxies
  * when not. Pass the full TopicContext for semantic ranking; without it a
  * minimal context is built from topics/siblings.
@@ -706,15 +821,17 @@ export function scoreResult(
 ): number {
   const c = ctx ?? minimalContext(topics, siblings);
   const score =
-    0.35 * calculateTopicRelevance(r, c) +
-    0.2 * calculateEngagementSignal(r, c) +
-    0.15 * calculateRecencySignal(r) +
-    0.15 * calculateCreatorAuthority(r, c) +
-    0.1 * calculatePlatformFit(r, c) +
-    0.05 * socialTier(r) -
+    0.3 * calculateTopicRelevance(r, c) +
+    0.15 * calculatePlatformFit(r, c) +
+    0.15 * socialTier(r) +
+    0.15 * calculateContentQuality(r, c) +
+    0.15 * calculateMoodFit(r, c) +
+    0.05 * calculateRecencySignal(r) +
+    0.05 * calculateEngagementSignal(r, c) -
     calculateNoisePenalty(r, c) -
     calculateWeakMetadataPenalty(r) -
-    detectUnrelatedEntity(r, c);
+    detectUnrelatedEntity(r, c) -
+    calculateMoodMismatchPenalty(r, c);
   return Math.max(score, 0.01);
 }
 

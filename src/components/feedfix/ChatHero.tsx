@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
 import { QuickPills } from "@/components/feedfix/QuickPills";
 import { PlatformSelector } from "@/components/feedfix/PlatformSelector";
+import { MoodSelector } from "@/components/feedfix/MoodSelector";
 import { encodeFeedPackInput } from "@/lib/generateFeedPack";
 import { trackEvent } from "@/lib/analytics";
 import { translations } from "@/lib/i18n";
 import { useLang } from "@/lib/langContext";
-import type { TrainablePlatform } from "@/types";
+import type { FeedMood, TrainablePlatform } from "@/types";
 
 export function ChatHero() {
   const router = useRouter();
@@ -22,6 +23,7 @@ export function ChatHero() {
   // an inverted selection — tapping X deselected it and built a pack for
   // every platform EXCEPT X.
   const [selectedPlatforms, setSelectedPlatforms] = useState<TrainablePlatform[]>([]);
+  const [selectedMoods, setSelectedMoods] = useState<FeedMood[]>([]);
   const t = translations[lang];
 
   const canSubmit = prompt.trim().length > 0 || pills.length > 0;
@@ -32,10 +34,16 @@ export function ChatHero() {
     );
   }
 
+  function toggleMood(mood: FeedMood) {
+    setSelectedMoods((prev) =>
+      prev.includes(mood) ? prev.filter((m) => m !== mood) : [...prev, mood],
+    );
+  }
+
   function submit(overridePrompt?: string) {
     const finalPrompt = (overridePrompt ?? prompt).trim();
     if (!finalPrompt && pills.length === 0) return;
-    const input = { prompt: finalPrompt, pills, uiLang: lang, selectedPlatforms };
+    const input = { prompt: finalPrompt, pills, uiLang: lang, selectedPlatforms, selectedMoods };
     trackEvent("generate_pack", input);
     router.push(`/results?data=${encodeFeedPackInput(input)}`);
   }
@@ -123,6 +131,10 @@ export function ChatHero() {
 
             <div className="mt-4">
               <PlatformSelector selected={selectedPlatforms} onToggle={togglePlatform} lang={lang} />
+            </div>
+
+            <div className="mt-4 border-t border-border/50 pt-4">
+              <MoodSelector selected={selectedMoods} onToggle={toggleMood} lang={lang} />
             </div>
 
             <div className="mt-4">
