@@ -22,9 +22,11 @@ export interface SearchResult {
   snippet?: string;
   source: "serpapi" | "tavily" | "bing" | "google_cse" | "youtube_api" | "mock";
   /** Real metrics — only ever set from actual API responses (YouTube Data
-   * API statistics/snippet), never estimated. */
+   * API statistics/contentDetails/snippet), never estimated. */
   viewCount?: number;
+  likeCount?: number;
   publishedAt?: string;
+  durationSeconds?: number;
 }
 
 /** YouTube-only search options: order by view count and/or restrict to the
@@ -148,6 +150,14 @@ function getWebProvider(): WebProvider | null {
 
 // ── YouTube Data API (direct videos/channels, real metadata) ───────────────
 
+/** "PT4M13S" → 253 seconds. YouTube contentDetails uses ISO 8601 durations. */
+function parseIsoDuration(iso?: string): number | undefined {
+  if (!iso) return undefined;
+  const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!m) return undefined;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+}
+
 async function youtubeSearch(
   query: string,
   limit: number,
@@ -203,21 +213,32 @@ async function youtubeSearch(
     ];
   });
 
-  // Enrich with REAL view counts in one batched videos.list call (1 quota
-  // unit vs 100 for the search itself). Fail-soft: results without stats
-  // are still returned, they just don't get verified-engagement labels.
+  // Enrich with REAL metrics (views, likes, duration) in one batched
+  // videos.list call (1 quota unit vs 100 for the search itself).
+  // Fail-soft: results without stats are still returned, they just don't
+  // get verified-engagement labels or duration-based mood rules.
   const videoIds = results.map((r) => r.videoId).filter(Boolean) as string[];
   if (videoIds.length > 0) {
     try {
       const stats = (await fetchJson(
-        `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds.join(",")}&key=${key}`,
-      )) as { items?: { id: string; statistics?: { viewCount?: string } }[] };
-      const viewsById = new Map(
-        (stats.items ?? []).map((v) => [v.id, Number(v.statistics?.viewCount)]),
-      );
+        `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails&id=${videoIds.join(",")}&key=${key}`,
+      )) as {
+        items?: {
+          id: string;
+          statistics?: { viewCount?: string; likeCount?: string };
+          contentDetails?: { duration?: string };
+        }[];
+      };
+      const byId = new Map((stats.items ?? []).map((v) => [v.id, v]));
       for (const r of results) {
-        const views = r.videoId ? viewsById.get(r.videoId) : undefined;
-        if (views !== undefined && Number.isFinite(views)) r.viewCount = views;
+        const v = r.videoId ? byId.get(r.videoId) : undefined;
+        if (!v) continue;
+        const views = Number(v.statistics?.viewCount);
+        if (Number.isFinite(views)) r.viewCount = views;
+        const likes = Number(v.statistics?.likeCount);
+        if (Number.isFinite(likes)) r.likeCount = likes;
+        const duration = parseIsoDuration(v.contentDetails?.duration);
+        if (duration !== undefined) r.durationSeconds = duration;
       }
     } catch {
       // stats unavailable — keep the un-enriched results

@@ -241,7 +241,7 @@ export const translations: Record<UiLang, Dict> = {
     footerProductCol: "Ürün",
     footerMoreCol: "Daha fazlası",
     footerLegal:
-      "© {y} Feed Detox. Sosyal medya hesaplarına asla bağlanmayız, erişmeyiz ve onları değiştirmeyiz — her link gerçek platformu kendi tarayıcında açar.",
+      "© {y} Feed Detox. Sosyal medya hesaplarına bağlanmayız, erişmeyiz veya değişiklik yapmayız — her link gerçek platformu kendi tarayıcında açar.",
     packsEyebrow: "Sample Packs",
     packsTitle: "Hazır bir pack ile başla",
     packsSeeAll: "Tüm sample pack’leri gör →",

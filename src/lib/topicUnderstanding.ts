@@ -84,35 +84,35 @@ export const MOOD_LABELS: Record<FeedMood, string> = {
 
 const MOOD_PROFILES: Record<FeedMood, { positive: string[]; negative: string[] }> = {
   comedy: {
-    positive: ["funny", "humor", "comedy", "light", "entertaining", "sketch", "parody"],
-    negative: ["toxic", "ragebait", "heavy drama", "beef", "fight"],
+    positive: ["funny", "humor", "comedy", "light", "entertaining", "sketch", "parody", "komik"],
+    negative: ["toxic", "ragebait", "heavy drama", "beef", "fight", "aggressive"],
   },
   motivation: {
     positive: ["motivational", "progress", "discipline", "success story", "training", "self-improvement", "career growth", "journey"],
     negative: ["doom", "negativity", "drama", "blackpill"],
   },
   calm: {
-    positive: ["calm", "soft", "relaxing", "slow", "peaceful", "ambient", "chill", "smooth"],
+    positive: ["calm", "soft", "relaxing", "slow", "peaceful", "ambient", "chill", "smooth", "aesthetic"],
     negative: ["shouting", "ragebait", "conflict", "drama", "screaming", "vs"],
   },
   focus: {
-    positive: ["tutorial", "practical", "educational", "workflow", "productivity", "guide", "analysis", "how to"],
-    negative: ["distraction", "clickbait", "gossip", "viral moment", "prank"],
+    positive: ["tutorial", "practical", "educational", "workflow", "productivity", "guide", "analysis", "how to", "step-by-step", "step by step", "use case", "breakdown"],
+    negative: ["distraction", "clickbait", "gossip", "viral moment", "prank", "hype"],
   },
   inspiration: {
-    positive: ["aesthetic", "creative", "ideas", "design", "aspirational", "beautiful", "craft", "process"],
+    positive: ["aesthetic", "creative", "ideas", "design", "aspirational", "beautiful", "craft", "process", "lookbook", "showcase"],
     negative: ["low-effort", "repost", "spam", "generic"],
   },
   deepDive: {
-    positive: ["analysis", "breakdown", "long-form", "thread", "documentary", "explainer", "tactical analysis", "detailed review", "deep dive", "in depth"],
-    negative: ["shallow", "generic", "quick drama", "in 30 seconds", "you won't believe"],
+    positive: ["analysis", "breakdown", "long-form", "thread", "documentary", "explainer", "tactical analysis", "detailed review", "deep dive", "in depth", "tutorial", "guide", "strategy", "review", "press conference", "analiz", "taktik"],
+    negative: ["shallow", "generic", "quick drama", "in 30 seconds", "you won't believe", "#shorts", "random edit"],
   },
   noDrama: {
-    positive: ["official", "reliable", "neutral", "educational", "constructive", "verified"],
-    negative: ["drama", "toxic", "fight", "beef", "rumor", "fake transfer", "ragebait", "betting", "exposed", "slams", "destroys"],
+    positive: ["official", "reliable", "neutral", "educational", "constructive", "verified", "match analysis", "technical breakdown", "primary source", "resmi"],
+    negative: ["drama", "toxic", "fight", "beef", "rumor", "fake transfer", "transfer drama", "transfer bomb", "clickbait", "ragebait", "betting", "bahis", "exposed", "slams", "destroys", "son dakika", "dedikodu", "olaylı", "kavga", "skandal"],
   },
   discovery: {
-    positive: ["niche", "emerging", "underground", "community", "independent", "curated", "hidden gem", "up and coming"],
+    positive: ["niche", "emerging", "underground", "community", "independent", "curated", "hidden gem", "up and coming", "specialist"],
     negative: ["overexposed", "generic", "mass repost", "everyone is talking about"],
   },
 };

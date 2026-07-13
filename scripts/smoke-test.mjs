@@ -13,7 +13,8 @@
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const PLATFORMS = ["x", "instagram", "tiktok", "youtube"];
 const BANNED_TR = ["zaman tüneli", "zaman akışı", "içerik üreticisi"];
-const GENERIC_TITLE = /^(instagram|tiktok|x|twitter|youtube)$|:\s*(instagram|tiktok|x|twitter|youtube)\.?$/i;
+const GENERIC_TITLE =
+  /^(instagram|tiktok|x|twitter|youtube)$|:\s*(instagram|tiktok|x|twitter|youtube)\.?$|:\s*(is\s+)?on (tiktok|instagram)$|:\s*@[\w.]+$/i;
 
 let failures = 0;
 
@@ -139,7 +140,17 @@ async function main() {
   );
   check(
     "Deep Dive: top-2 slots are not Shorts",
-    ddItems.slice(0, 2).every((r) => r.type !== "short"),
+    ddItems.slice(0, 2).every((r) => r.type !== "short" && !/#shorts?\b/i.test(r.title)),
+  );
+  const RAGEBAIT = /\b(shocking|you won'?t believe|scandal|exposed|beef|fake news|dedikodu|skandal|son dakika)\b/i;
+  const noDramaX = await pack({ topic: "galatasaray", selectedPlatforms: ["x"], selectedMoods: ["noDrama"] });
+  check(
+    "No Drama (X): no ragebait/rumor-heavy titles",
+    (noDramaX.sections.x ?? []).every((r) => !RAGEBAIT.test(r.title)),
+  );
+  check(
+    "No Drama (X): explanations name the mood",
+    (noDramaX.sections.x ?? []).some((r) => r.whyItMatters.includes("Because you selected No Drama")),
   );
   const focus = await pack({ topic: "ai tools", selectedPlatforms: ["tiktok"], selectedMoods: ["focus"] });
   check(

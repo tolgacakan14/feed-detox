@@ -123,7 +123,9 @@ export interface RawSearchResult {
   snippet?: string;
   /** Real provider metrics (YouTube Data API) — never estimated. */
   viewCount?: number;
+  likeCount?: number;
   publishedAt?: string;
+  durationSeconds?: number;
   /** Tag set by the caller when the query was genuinely scoped to the last
    * 7 days ordered by views — enables the verified weekly-top label. */
   weeklyScoped?: boolean;
@@ -201,6 +203,9 @@ export function cleanTitle(raw: string): string {
     .replace(/&amp;/g, "&")
     .replace(/\s*[-|–]\s*(YouTube|TikTok|Instagram|X|Twitter)\s*$/i, "")
     .replace(/\s*\/\s*(Posts\s*\/\s*)?(X|Twitter)\s*$/i, "")
+    // "Ali Abdaal on TikTok" / "… is on TikTok" — provider page-title
+    // boilerplate, not part of the real title.
+    .replace(/\s+(is\s+)?on (TikTok|Instagram)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
   if (t && t[0] === t[0].toLowerCase() && /[a-z]/.test(t[0])) {
@@ -209,35 +214,77 @@ export function cleanTitle(raw: string): string {
   return t;
 }
 
-// Matches a bare platform name, and known generic page-title fallbacks the
+// Matches a bare platform name, leftover provider boilerplate ("on TikTok"
+// after suffix stripping), and known generic page-title fallbacks the
 // platforms themselves serve when a profile/video has no real title (e.g.
 // TikTok's default og:title is literally "TikTok - Make Your Day").
 const GENERIC_TITLE =
-  /^(instagram|tiktok|x|twitter|youtube)(\s*[-–]\s*make your day)?$|^log ?in\b|^sign ?up\b/i;
+  /^(instagram|tiktok|x|twitter|youtube)(\s*[-–]\s*make your day)?$|^log ?in\b|^sign ?up\b|^(is\s+)?on (tiktok|instagram)$/i;
 
-/** Clean topic-aware fallback titles for weak metadata — honest labels, not
- * fake creator names: "Galatasaray Reel signal", "Deep house video signal". */
-const FALLBACK_NOUN: Partial<Record<string, string>> = {
-  reel: "Reel signal",
-  post: "post signal",
-  video: "video signal",
-  short: "Shorts signal",
-  account: "creator signal",
-  creator: "creator signal",
-  channel: "channel signal",
+/** Human content-type nouns for handle-composed titles: "Reel by @user". */
+const TYPE_NOUN_HUMAN: Partial<Record<string, string>> = {
+  reel: "Reel",
+  post: "Post",
+  video: "Video",
+  short: "Short",
 };
 
-function fallbackTitle(topic: string, type: string): string {
+const CONTENT_TYPE_SET = new Set(["reel", "post", "video", "short"]);
+
+/** Titles that are structurally junk regardless of vocabulary: emoji-only
+ * ("🇵🇹"), zalgo/strikethrough unicode spam ("R̵o̵a̵d̵ ̵R̵u̵n̵n̵e̵r̵"),
+ * or scraped alt-text ("Image 1: …"). */
+function titleLooksBroken(t: string): boolean {
+  const letters = t.replace(/[^\p{L}]/gu, "");
+  if (letters.length < 3) return true;
+  const combining = (t.match(/[̀-ͯ]/g) ?? []).length;
+  if (combining >= 3) return true;
+  if (/^image \d+/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Clean topic-aware fallback titles for weak metadata — honest labels, not
+ * fake creator names. Category and mood flavor the noun ("Galatasaray
+ * analysis video signal" for sports/Deep Dive, "Japanese streetwear styling
+ * source" for fashion profiles) so the fallback still reads premium.
+ */
+function fallbackTitle(topic: string, type: string, ctx?: TopicContext): string {
   const t = topic ? topic[0].toUpperCase() + topic.slice(1) : "Topic";
-  return `${t} ${FALLBACK_NOUN[type] ?? "signal"}`;
+  const cat = ctx?.likelyCategory;
+  const deep = ctx?.moods.includes("deepDive") ?? false;
+  switch (type) {
+    case "video":
+      if (deep || cat === "sports") return `${t} analysis video signal`;
+      if (cat === "music") return `${t} set signal`;
+      return `${t} video signal`;
+    case "reel":
+      return cat === "sports" ? `${t} matchday Reel signal` : `${t} Reel signal`;
+    case "short":
+      return `${t} Shorts signal`;
+    case "post":
+      return `${t} post signal`;
+    case "account":
+    case "creator":
+      if (cat === "fashion") return `${t} styling source`;
+      if (cat === "tech_ai") return `${t} workflow creator`;
+      return `${t} creator signal`;
+    case "channel":
+      return `${t} channel signal`;
+    case "community":
+      return `${t} community signal`;
+    default:
+      return `${t} signal`;
+  }
 }
 
 /**
  * When the cleaned title is too generic to be useful (search providers
  * sometimes return just the platform name for Instagram/TikTok, which
- * block most scraping), derive something meaningful — first from an @handle
+ * block most scraping) — or is nothing but the topic echoed back — derive
+ * something meaningful: a "Reel by @handle" composition from a real handle
  * in the snippet, then the snippet's own first sentence, then a clean
- * topic+platform fallback label. Never invents a name; only recombines real
+ * topic+type fallback label. Never invents a name; only recombines real
  * text we already have, or falls back to an honest "… signal" label
  * (isFallback: true → the caller skips the "Instagram Reel:" prefix so it
  * doesn't read as a real extracted title).
@@ -247,17 +294,31 @@ function deriveTitle(
   snippet: string | undefined,
   cls: UrlClass,
   topic: string,
-): { text: string; isFallback: boolean } {
-  if (cleanedTitle && cleanedTitle.length >= 4 && !GENERIC_TITLE.test(cleanedTitle)) {
-    return { text: cleanedTitle, isFallback: false };
+  ctx?: TopicContext,
+): { text: string; skipPrefix: boolean } {
+  const topicEcho = topic.length > 0 && cleanedTitle.toLowerCase() === topic.toLowerCase();
+  if (
+    cleanedTitle &&
+    cleanedTitle.length >= 4 &&
+    !GENERIC_TITLE.test(cleanedTitle) &&
+    !topicEcho &&
+    !titleLooksBroken(cleanedTitle)
+  ) {
+    return { text: cleanedTitle, skipPrefix: false };
   }
   const handleMatch = snippet?.match(/@([\w.]{2,30})/);
-  if (handleMatch) return { text: `@${handleMatch[1]}`, isFallback: false };
+  if (handleMatch) {
+    const handle = `@${handleMatch[1]}`;
+    // "Instagram Reel: @galatasaray" reads broken — compose a premium
+    // "Reel by @galatasaray" for content; profiles keep the bare handle.
+    const noun = TYPE_NOUN_HUMAN[cls.type];
+    return { text: noun ? `${noun} by ${handle}` : handle, skipPrefix: true };
+  }
   const firstSentence = snippet?.split(/[.!?\n]/)[0]?.trim();
   if (firstSentence && firstSentence.length > 6 && firstSentence.length < 90) {
-    return { text: cleanTitle(firstSentence), isFallback: false };
+    return { text: cleanTitle(firstSentence), skipPrefix: false };
   }
-  return { text: fallbackTitle(topic, cls.type), isFallback: true };
+  return { text: fallbackTitle(topic, cls.type, ctx), skipPrefix: true };
 }
 
 /**
@@ -268,48 +329,76 @@ function deriveTitle(
  * content instead of transfer drama and rival bait." Falls back to
  * neutral nouns when no TopicContext is available.
  */
+/** The algorithm surface each platform trains — used inside mood clauses so
+ * the sentence names the actual feed ("teaches YouTube…", "pushes Explore…"). */
+const MOOD_FEED_NAME: Partial<Record<Platform, string>> = {
+  x: "your X timeline",
+  instagram: "Explore",
+  tiktok: "For You",
+  youtube: "YouTube",
+};
+const MOOD_FEED_NAME_TR: Partial<Record<Platform, string>> = {
+  x: "X timeline",
+  instagram: "Explore",
+  tiktok: "For You",
+  youtube: "YouTube",
+};
+
 /** One mood-aware follow-up sentence per mood — appended to the base
- * explanation when that mood is selected. EN/TR, product terms English. */
+ * explanation when that mood is selected. {feed} and {topic} are filled
+ * per item, so the clause names the platform's actual algorithm surface.
+ * EN/TR, product terms English; TR avoids suffixing {feed} directly. */
 const MOOD_WHY: Record<string, { en: string; tr: string }> = {
   comedy: {
-    en: "Because you selected Comedy, light topic-relevant content like this trains your feed to entertain without turning toxic.",
-    tr: "Comedy seçtiğin için bu tarz hafif, konuya bağlı content feed’ini toxic’e kaçmadan eğlenceli tutar.",
+    en: "Because you selected Comedy, light {topic} content like this trains {feed} to entertain without turning toxic.",
+    tr: "Comedy seçtiğin için bu tarz hafif {topic} content’i, {feed} tarafını toxic’e kaçmadan eğlenceli tutar.",
   },
   motivation: {
-    en: "Because you selected Motivation, progress-focused content like this pushes doom and drama out of your feed.",
-    tr: "Motivation seçtiğin için bu tarz progress odaklı content, feed’inden doom ve drama’yı uzaklaştırır.",
+    en: "Because you selected Motivation, progress-focused content like this pushes doom and drama out of {feed}.",
+    tr: "Motivation seçtiğin için bu tarz progress odaklı content, {feed} tarafından doom ve drama’yı uzaklaştırır.",
   },
   calm: {
-    en: "Because you selected Calm, low-noise content like this teaches your feed to stay peaceful instead of loud.",
-    tr: "Calm seçtiğin için bu tarz sakin content, feed’ine gürültü yerine düşük tempolu signal verir.",
+    en: "Because you selected Calm, low-noise content like this teaches {feed} to stay peaceful instead of loud.",
+    tr: "Calm seçtiğin için bu tarz sakin content, {feed} tarafına gürültü yerine düşük tempolu signal verir.",
   },
   focus: {
-    en: "Because you selected Focus, practical content like this steers your feed toward useful signal over distraction.",
-    tr: "Focus seçtiğin için bu tarz pratik content, feed’ini dikkat dağıtan şeyler yerine faydalı signal’a yönlendirir.",
+    en: "Because you selected Focus, practical {topic} content like this steers {feed} toward useful signal over distraction.",
+    tr: "Focus seçtiğin için bu tarz pratik {topic} content’i, {feed} tarafını dikkat dağıtan şeyler yerine faydalı signal’a yönlendirir.",
   },
   inspiration: {
-    en: "Because you selected Inspiration, craft-and-ideas content like this raises the creative bar of your feed.",
-    tr: "Inspiration seçtiğin için bu tarz craft ve fikir odaklı content, feed’inin yaratıcı çıtasını yükseltir.",
+    en: "Because you selected Inspiration, craft-and-ideas content like this raises the creative bar of {feed}.",
+    tr: "Inspiration seçtiğin için bu tarz craft ve fikir odaklı content, {feed} tarafının yaratıcı çıtasını yükseltir.",
   },
   deepDive: {
-    en: "Because you selected Deep Dive, this analysis-style content helps the algorithm learn you prefer context over quick drama.",
-    tr: "Deep Dive seçtiğin için bu analysis-style content, algorithm’e quick drama yerine daha bağlamlı içerik istediğini öğretir.",
+    en: "Because you selected Deep Dive, watching this {topic} analysis-style content teaches {feed} to recommend deeper breakdowns instead of quick drama.",
+    tr: "Deep Dive seçtiğin için bu {topic} analysis content’i, {feed} tarafında quick drama yerine daha derin breakdown’ların önerilmesi için signal verir.",
   },
   noDrama: {
-    en: "Because you selected No Drama, this source gives your feed cleaner signals around the topic.",
-    tr: "No Drama seçtiğin için bu source, feed’ine daha temiz signal verir.",
+    en: "Because you selected No Drama, this source gives {feed} cleaner {topic} signals and pushes rumor-heavy content down.",
+    tr: "No Drama seçtiğin için bu source, {feed} tarafına daha temiz {topic} signal’ları verir ve rumor-heavy content’i aşağı iter.",
   },
   discovery: {
-    en: "Because you selected Discovery, this niche source helps your feed move beyond the obvious accounts.",
-    tr: "Discovery seçtiğin için bu niche source, feed’ini obvious account’ların dışına taşır.",
+    en: "Because you selected Discovery, this niche source helps {feed} move beyond the obvious accounts.",
+    tr: "Discovery seçtiğin için bu niche source, {feed} tarafını obvious account’ların dışına taşır.",
   },
 };
 
-/** The primary (first-selected) mood's follow-up sentence. */
-function moodClause(ctx: TopicContext | undefined, lang: "en" | "tr"): string {
+/** The primary (first-selected) mood's follow-up sentence, with the
+ * platform's feed surface and the topic substituted in. Exported so
+ * finalize can also append it to hand-authored curated copy. */
+export function moodClause(
+  ctx: TopicContext | undefined,
+  lang: "en" | "tr",
+  platform: Platform,
+): string {
   if (!ctx || ctx.moods.length === 0) return "";
   const clause = MOOD_WHY[ctx.moods[0]];
-  return clause ? ` ${lang === "tr" ? clause.tr : clause.en}` : "";
+  if (!clause) return "";
+  const feed =
+    (lang === "tr" ? MOOD_FEED_NAME_TR[platform] : MOOD_FEED_NAME[platform]) ??
+    (lang === "tr" ? "feed" : "your feed");
+  const topic = ctx.normalizedTopic || (lang === "tr" ? "bu konu" : "this topic");
+  return ` ${(lang === "tr" ? clause.tr : clause.en).replaceAll("{feed}", feed).replaceAll("{topic}", topic)}`;
 }
 
 export function buildWhyItMatters(
@@ -318,7 +407,7 @@ export function buildWhyItMatters(
   ctx?: TopicContext,
   lang: "en" | "tr" = "en",
 ): string {
-  return baseWhyItMatters(platform, type, ctx, lang) + moodClause(ctx, lang);
+  return baseWhyItMatters(platform, type, ctx, lang) + moodClause(ctx, lang, platform);
 }
 
 function baseWhyItMatters(
@@ -416,13 +505,14 @@ export function extractDirectLinks(
     if (!cls) return [];
     if (socialOnly && !SOCIAL_PLATFORMS.has(cls.platform)) return [];
     const prefix = TITLE_PREFIX[`${cls.platform}:${cls.type}`];
-    const derived = deriveTitle(cleanTitle(raw.title), raw.snippet, cls, ctx?.normalizedTopic ?? "");
+    const derived = deriveTitle(cleanTitle(raw.title), raw.snippet, cls, ctx?.normalizedTopic ?? "", ctx);
     return [
       {
         id: `extracted-${raw.url.replace(/\W+/g, "-").slice(0, 60)}`,
-        // Fallback labels ("Galatasaray Reel signal") stand alone — never
-        // dressed up with an "Instagram Reel:" prefix like a real title.
-        title: derived.isFallback ? derived.text : prefix ? `${prefix}: ${derived.text}` : derived.text,
+        // Fallback labels ("Galatasaray Reel signal") and handle-composed
+        // titles ("Reel by @galatasaray") stand alone — never dressed up
+        // with an "Instagram Reel:" prefix like a real extracted title.
+        title: derived.skipPrefix ? derived.text : prefix ? `${prefix}: ${derived.text}` : derived.text,
         url: raw.url,
         platform: cls.platform,
         type: cls.type,
@@ -432,7 +522,9 @@ export function extractDirectLinks(
         snippet: raw.snippet,
         searchRank: index,
         viewCount: raw.viewCount,
+        likeCount: raw.likeCount,
         publishedAt: raw.publishedAt,
+        durationSeconds: raw.durationSeconds,
         weeklyScoped: raw.weeklyScoped,
         popularitySignal:
           raw.viewCount !== undefined
@@ -652,7 +744,16 @@ function watchQuality(r: DiscoveryResult, ctx: TopicContext): number {
  * non-clickbait video is a better engagement bet than a weak one.
  */
 export function calculateEngagementSignal(r: DiscoveryResult, ctx: TopicContext): number {
-  if (typeof r.viewCount === "number") return Math.min(1, Math.log10(r.viewCount + 1) / 7);
+  if (typeof r.viewCount === "number") {
+    const viewScore = Math.min(1, Math.log10(r.viewCount + 1) / 7);
+    // Real like counts sharpen the picture slightly (likes ≈ views/25 is
+    // strong engagement) — a small verified bonus, never a substitute.
+    const likeBonus =
+      typeof r.likeCount === "number" && r.viewCount > 0 && r.likeCount / r.viewCount > 0.04
+        ? 0.05
+        : 0;
+    return Math.min(1, viewScore + likeBonus);
+  }
   if (r.engagementLabel) return ENGAGEMENT_SCORE[r.engagementLabel] ?? 0.5;
   if (r.popularitySignal === "Appears across multiple social searches") return 0.85;
   const rankProxy = r.searchRank !== undefined ? Math.max(0.35, 0.9 - r.searchRank * 0.07) : 0.45;
@@ -711,12 +812,19 @@ export function calculateCreatorAuthority(r: DiscoveryResult, ctx: TopicContext)
 export function calculateMoodFit(r: DiscoveryResult, ctx: TopicContext): number {
   if (ctx.moods.length === 0) return 0.6;
   const hay = `${r.title} ${r.snippet ?? ""}`.toLowerCase();
-  let fit = 0.45; // baseline: not clashing is already acceptable
+  let fit = 0.4; // baseline: not clashing is acceptable, matching is better
   const positiveHits = ctx.moodPositive.filter((s) => hay.includes(s)).length;
-  fit += Math.min(positiveHits * 0.18, 0.45);
+  fit += Math.min(positiveHits * 0.2, 0.5);
   if (ctx.moods.includes("deepDive")) {
-    if (r.type === "short") fit -= 0.2; // shorts are the opposite of a deep dive
+    if (r.type === "short") fit -= 0.25; // shorts are the opposite of a deep dive
     if (r.type === "video" || r.type === "post" || r.type === "article") fit += 0.1;
+    // REAL duration from the API: long-form is the whole point of Deep Dive.
+    if (typeof r.durationSeconds === "number") {
+      if (r.durationSeconds >= 300) fit += 0.15;
+      else if (r.durationSeconds < 60 && !ctx.moods.includes("comedy") && !ctx.moods.includes("discovery")) {
+        fit -= 0.2;
+      }
+    }
   }
   if (ctx.moods.includes("comedy") && ["short", "reel", "video"].includes(r.type)) {
     fit += 0.05; // short-form is fine for comedy when topic-relevant
@@ -729,23 +837,46 @@ export function calculateMoodFit(r: DiscoveryResult, ctx: TopicContext): number 
   ) {
     fit += 0.15;
   }
-  if (ctx.moods.includes("noDrama") && CONFIDENCE_SCORE[r.confidence] === 1) {
-    fit += 0.08; // verified/official sources are the No-Drama backbone
+  if (ctx.moods.includes("noDrama")) {
+    if (CONFIDENCE_SCORE[r.confidence] === 1) fit += 0.08; // verified sources are the backbone
+    if (/\b(official|resmi)\b/.test(hay)) fit += 0.1;
   }
   return Math.max(0, Math.min(fit, 1));
 }
 
-/** Mood mismatch penalty (0–0.3): the item's text hits the selected moods'
+/** Title that SCREAMS — 60%+ of its letters uppercase across 12+ letters is
+ * the classic clickbait pattern ("YOU WON'T BELIEVE WHAT HAPPENED"). */
+function isAllCapsClickbait(title: string): boolean {
+  const letters = title.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ]/g, "");
+  if (letters.length < 12) return false;
+  const uppers = letters.replace(/[^A-ZÇĞİÖŞÜ]/g, "").length;
+  return uppers / letters.length > 0.6;
+}
+
+/**
+ * Mood mismatch penalty (0–0.45): the item's text hits the selected moods'
  * negative vocabulary ("beef", "rumor", "exposed" for No Drama; "shallow",
- * "quick drama" for Deep Dive; shouting/conflict words for Calm…). */
+ * "quick drama" for Deep Dive; shouting/conflict words for Calm…), plus
+ * hard structural mismatches — Shorts/#shorts under Deep Dive or No Drama,
+ * all-caps clickbait titles under No Drama/Calm/Focus. Strong enough to
+ * visibly reorder results, which is the entire point of picking a mood.
+ */
 export function calculateMoodMismatchPenalty(r: DiscoveryResult, ctx: TopicContext): number {
   if (ctx.moods.length === 0) return 0;
   const hay = `${r.title} ${r.snippet ?? ""}`.toLowerCase();
   const hits = ctx.moodNegative.filter((s) => hay.includes(s)).length;
-  let penalty = Math.min(hits * 0.12, 0.25);
-  if (ctx.moods.includes("noDrama") && RAGEBAIT_PATTERN.test(hay)) penalty += 0.1;
-  if (ctx.moods.includes("calm") && RAGEBAIT_PATTERN.test(hay)) penalty += 0.08;
-  return Math.min(penalty, 0.3);
+  let penalty = Math.min(hits * 0.14, 0.3);
+  const seriousMood = ctx.moods.includes("noDrama") || ctx.moods.includes("deepDive");
+  if (seriousMood && (r.type === "short" || /#shorts?\b/i.test(r.title))) penalty += 0.15;
+  if (ctx.moods.includes("noDrama") && RAGEBAIT_PATTERN.test(hay)) penalty += 0.12;
+  if (ctx.moods.includes("calm") && RAGEBAIT_PATTERN.test(hay)) penalty += 0.1;
+  if (
+    (ctx.moods.includes("noDrama") || ctx.moods.includes("calm") || ctx.moods.includes("focus")) &&
+    isAllCapsClickbait(r.title)
+  ) {
+    penalty += 0.12;
+  }
+  return Math.min(penalty, 0.45);
 }
 
 /** Noise penalty (0–0.4): ragebait language, hashtag-stuffed titles, the
@@ -800,16 +931,18 @@ export function calculateContentQuality(r: DiscoveryResult, ctx: TopicContext): 
 }
 
 /**
- * score = 0.30 topicRelevance + 0.15 platformFit + 0.15 directDestination
- *       + 0.15 contentQuality + 0.15 moodFit
+ * score = 0.28 topicRelevance + 0.14 platformFit + 0.12 directDestination
+ *       + 0.16 contentQuality + 0.20 moodFit
  *       + 0.05 freshnessSignal + 0.05 popularitySignal
  *       − noisePenalty − weakMetadataPenalty − unrelatedEntityPenalty
  *       − moodMismatchPenalty
  *
  * Topic relevance still leads — mood MODIFIES the topic, never replaces
- * it. moodFit is neutral (0.6) when no moods are selected, so mood-less
- * packs rank exactly as before. Engagement and recency use REAL provider
- * metrics (view counts, publish dates) when available and honest proxies
+ * it — but moodFit (0.20) plus the mismatch penalty (up to 0.45) is now
+ * strong enough to visibly reorder results when a mood is selected.
+ * moodFit is neutral (0.6) when no moods are selected, so mood-less packs
+ * rank exactly as before. Engagement and recency use REAL provider metrics
+ * (view counts, likes, publish dates) when available and honest proxies
  * when not. Pass the full TopicContext for semantic ranking; without it a
  * minimal context is built from topics/siblings.
  */
@@ -821,11 +954,11 @@ export function scoreResult(
 ): number {
   const c = ctx ?? minimalContext(topics, siblings);
   const score =
-    0.3 * calculateTopicRelevance(r, c) +
-    0.15 * calculatePlatformFit(r, c) +
-    0.15 * socialTier(r) +
-    0.15 * calculateContentQuality(r, c) +
-    0.15 * calculateMoodFit(r, c) +
+    0.28 * calculateTopicRelevance(r, c) +
+    0.14 * calculatePlatformFit(r, c) +
+    0.12 * socialTier(r) +
+    0.16 * calculateContentQuality(r, c) +
+    0.2 * calculateMoodFit(r, c) +
     0.05 * calculateRecencySignal(r) +
     0.05 * calculateEngagementSignal(r, c) -
     calculateNoisePenalty(r, c) -
@@ -1000,17 +1133,36 @@ const PREFIXED_TITLE = /^(YouTube (video|Short|channel)|Instagram (Reel|post)|Ti
 
 /**
  * Last-line title quality gate, applied to EVERY card regardless of source
- * (curated, demo, live-extracted): platform-only and prefix-plus-platform
- * titles are replaced with a clean, honest topic-aware fallback label
- * ("Galatasaray Reel signal"). Good titles pass through untouched.
+ * (curated, demo, live-extracted):
+ *  - platform-only and prefix-plus-platform titles ("TikTok video: on
+ *    TikTok") → clean topic-aware fallback label
+ *  - prefix-plus-bare-handle ("Instagram Reel: @galatasaray") → premium
+ *    "Reel by @galatasaray" composition
+ *  - topic-echo titles ("TikTok video: Galatasaray") → fallback label
+ * Good titles pass through untouched.
  */
 export function formatRecommendationTitle(item: DiscoveryResult, ctx?: TopicContext): string {
-  const title = item.title.trim();
+  const title = cleanTitle(item.title.trim());
   const stripped = title.replace(PREFIXED_TITLE, "").trim();
-  if (title && stripped.length >= 4 && !GENERIC_TITLE.test(title) && !GENERIC_TITLE.test(stripped)) {
+  // "Instagram Reel: @galatasaray" → "Reel by @galatasaray"
+  if (/^@[\w.]{2,30}$/.test(stripped)) {
+    const noun = TYPE_NOUN_HUMAN[item.type];
+    if (noun && CONTENT_TYPE_SET.has(item.type)) return `${noun} by ${stripped}`;
+    return stripped; // profiles keep the bare handle
+  }
+  const topic = ctx?.normalizedTopic ?? "";
+  const topicEcho = topic.length > 0 && stripped.toLowerCase() === topic.toLowerCase();
+  if (
+    title &&
+    stripped.length >= 4 &&
+    !GENERIC_TITLE.test(title) &&
+    !GENERIC_TITLE.test(stripped) &&
+    !topicEcho &&
+    !titleLooksBroken(stripped)
+  ) {
     return title;
   }
-  return fallbackTitle(ctx?.normalizedTopic ?? "", item.type);
+  return fallbackTitle(topic, item.type, ctx);
 }
 
 /**
@@ -1025,14 +1177,20 @@ export function finalizeFeedPackItem(
   ctx?: TopicContext,
   lang: "en" | "tr" = "en",
 ): DiscoveryResult {
+  // EN path preserves hand-authored curated copy but still appends the
+  // mood clause (guarded against duplication — live-extracted items
+  // already carry it from extraction time). TR regenerates fully.
+  const baseWhy =
+    lang === "tr"
+      ? buildWhyItMatters(item.platform, item.type, ctx, "tr")
+      : (item.whyItMatters ?? buildWhyItMatters(item.platform, item.type, ctx));
+  const clause = moodClause(ctx, lang, item.platform);
+  const alreadyMooded = baseWhy.includes(lang === "tr" ? "seçtiğin için" : "Because you selected");
   return {
     ...item,
     title: formatRecommendationTitle(item, ctx),
     bestAction: lang === "tr" ? inferBestAction(item, "tr") : (item.bestAction ?? inferBestAction(item)),
-    whyItMatters:
-      lang === "tr"
-        ? buildWhyItMatters(item.platform, item.type, ctx, "tr")
-        : (item.whyItMatters ?? buildWhyItMatters(item.platform, item.type, ctx)),
+    whyItMatters: clause && !alreadyMooded ? baseWhy + clause : baseWhy,
     noiseRisk: item.noiseRisk ?? inferNoiseRisk(item),
     nicheLevel: item.nicheLevel ?? inferNicheLevel(item),
     freshness: inferFreshness(item),

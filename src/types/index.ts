@@ -113,8 +113,13 @@ export interface DiscoveryResult {
   /** Real view count from a provider API (YouTube Data API statistics) —
    * only ever set from actual API data, never estimated. */
   viewCount?: number;
+  /** Real like count from a provider API — never estimated. */
+  likeCount?: number;
   /** ISO publish date from a provider API — powers the recency signal. */
   publishedAt?: string;
+  /** Real video duration in seconds from a provider API — powers the
+   * Deep Dive long-form preference. */
+  durationSeconds?: number;
   /** True only when the item came from a provider query genuinely scoped to
    * the last 7 days ordered by views — required for the verified
    * "Most viewed this week" label. */
