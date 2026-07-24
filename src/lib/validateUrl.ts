@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type { DiscoveryResult, Platform } from "@/types";
 
 /**
@@ -8,6 +10,10 @@ import type { DiscoveryResult, Platform } from "@/types";
  *    (search URLs on known domains don't need a fetch). Results are cached
  *    in-memory. Platforms that block bots fail open — the item is kept
  *    because it came from a trusted source; hard 404/410 rejects it.
+ * 3. SSRF hardening: every hop (including redirect targets) must resolve to
+ *    a public IP and use https — a compromised or malicious redirect target
+ *    pointing at localhost/cloud-metadata/private ranges is rejected before
+ *    it's ever fetched, not just the original URL.
  */
 
 const PLATFORM_DOMAINS: Record<Platform, string[]> = {
@@ -42,24 +48,102 @@ export function isStructurallyValid(result: DiscoveryResult): boolean {
   return true;
 }
 
+// ── SSRF guard ───────────────────────────────────────────────────────────
+// "web"/"newsletter" results (and any redirect target, regardless of
+// platform) can point at an arbitrary https hostname — isStructurallyValid
+// only checked the scheme and an optional domain allowlist, not what that
+// hostname actually resolves to. Block requests to loopback, private,
+// link-local (this covers the 169.254.169.254 cloud-metadata address),
+// unique-local, and other non-public ranges before every fetch.
+
+function isPrivateOrReservedIp(ip: string): boolean {
+  const version = isIP(ip);
+  if (version === 4) {
+    const parts = ip.split(".").map(Number);
+    const [a, b] = parts;
+    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true; // malformed — fail closed
+    if (a === 127) return true; // loopback
+    if (a === 10) return true; // private
+    if (a === 172 && b >= 16 && b <= 31) return true; // private
+    if (a === 192 && b === 168) return true; // private
+    if (a === 169 && b === 254) return true; // link-local (cloud metadata lives here)
+    if (a === 0) return true; // "this network"
+    if (a >= 224) return true; // multicast/reserved/broadcast
+    return false;
+  }
+  if (version === 6) {
+    const lower = ip.toLowerCase();
+    if (lower === "::1" || lower === "::") return true; // loopback / unspecified
+    if (lower.startsWith("fe8") || lower.startsWith("fe9") || lower.startsWith("fea") || lower.startsWith("feb")) return true; // link-local fe80::/10
+    if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique local fc00::/7
+    const v4Mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (v4Mapped) return isPrivateOrReservedIp(v4Mapped[1]);
+    return false;
+  }
+  return true; // not a parseable IP — fail closed
+}
+
+/** Resolves the hostname and rejects if it points at a private/reserved
+ * address. Fails closed on DNS errors — an unresolvable host is not fetched. */
+async function isSafeHost(hostname: string): Promise<boolean> {
+  try {
+    const { address } = await lookup(hostname);
+    return !isPrivateOrReservedIp(address);
+  } catch {
+    return false;
+  }
+}
+
 // ── Network check (server-side, cached) ────────────────────────────────────
 
 const cache = new Map<string, boolean>(); // url → keep?
+
+const MAX_REDIRECTS = 3;
+const FETCH_TIMEOUT_MS = 3500;
 
 async function checkUrl(url: string): Promise<boolean> {
   const cached = cache.get(url);
   if (cached !== undefined) return cached;
 
-  let keep = true; // fail open for trusted sources
+  let keep = true; // fail open for trusted sources on network hiccups
   try {
-    const res = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      headers: { "user-agent": "Mozilla/5.0 (FeedDetox link check)" },
-      signal: AbortSignal.timeout(3500),
-    });
-    // Only hard "gone" statuses reject; 403/429/5xx mean "blocked us", not "fake".
-    keep = res.status !== 404 && res.status !== 410;
+    let currentUrl = url;
+    let hop = 0;
+    for (;;) {
+      const parsed = new URL(currentUrl);
+      if (parsed.protocol !== "https:" || !(await isSafeHost(parsed.hostname))) {
+        keep = false;
+        break;
+      }
+
+      // Manual redirect handling — each hop is re-validated above before
+      // being followed, so a redirect can't smuggle us onto a private host.
+      const res = await fetch(currentUrl, {
+        method: "GET",
+        redirect: "manual",
+        headers: { "user-agent": "Mozilla/5.0 (FeedDetox link check)" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      // Body is never read (.text()/.json()/etc. are never called) — only
+      // the status/headers are inspected, so there's no unbounded-download
+      // exposure here to cap separately.
+
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) break; // redirect with no target — treat as reachable
+        if (hop >= MAX_REDIRECTS) {
+          keep = false; // too many hops — suspicious, reject rather than loop
+          break;
+        }
+        currentUrl = new URL(location, currentUrl).toString();
+        hop += 1;
+        continue;
+      }
+
+      // Only hard "gone" statuses reject; 403/429/5xx mean "blocked us", not "fake".
+      keep = res.status !== 404 && res.status !== 410;
+      break;
+    }
   } catch {
     keep = true; // network error/timeout — keep, source is trusted
   }

@@ -1,11 +1,13 @@
 import { matchFeedSources } from "@/data/feedSources";
 import { matchCurated } from "@/data/curatedSources";
 import { analyzeTopics, type TopicIntel } from "@/lib/topicIntel";
-import { FEED_MOODS, understandTopic, type TopicContext } from "@/lib/topicUnderstanding";
+import { understandTopic, type TopicContext } from "@/lib/topicUnderstanding";
+import { MIN_RESULT_SCORE, PLATFORM_SECTION_TARGET } from "@/lib/qualityConfig";
 import {
   calculateCreatorAuthority,
   calculateEngagementSignal,
   calculateMoodFit,
+  calculateMoodMismatchPenalty,
   dedupeByUrl,
   extractDirectLinks,
   filterLowQuality,
@@ -23,7 +25,6 @@ import { validateResults } from "@/lib/validateUrl";
 import type {
   DayPlanItem,
   DiscoveryResult,
-  FeedMood,
   FeedPackInput,
   FeedPackResult,
   SectionKey,
@@ -235,10 +236,17 @@ function composeSlots(sorted: DiscoveryResult[], cap: number, ctx: TopicContext)
     used.add(item);
   });
 
-  // Slots 3–4: top authority sources, distinct creators.
+  // Slots 3–4: top authority sources, distinct creators. Authority alone
+  // isn't enough — an authoritative channel's rival-heavy or dramatic post
+  // must still lose to a cleaner alternative once a mood is selected (e.g.
+  // No Drama), so this blends in moodFit/mismatch exactly like slotRank
+  // above rather than sorting by raw authority.
+  const authorityRank = (r: DiscoveryResult) =>
+    calculateCreatorAuthority(r, ctx) +
+    (ctx.moods.length > 0 ? 0.6 * calculateMoodFit(r, ctx) - calculateMoodMismatchPenalty(r, ctx) : 0);
   const byAuthority = sorted
     .filter((r) => !used.has(r))
-    .sort((a, b) => calculateCreatorAuthority(b, ctx) - calculateCreatorAuthority(a, ctx));
+    .sort((a, b) => authorityRank(b) - authorityRank(a));
   const pickedCreators = new Set(out.map(creatorKey));
   let creatorSlots = 0;
   for (const item of byAuthority) {
@@ -297,11 +305,16 @@ function groupResults(items: DiscoveryResult[], ctx: TopicContext) {
     else buckets.more.push(it); // reddit, web, newsletter, spotify
   }
   (Object.keys(buckets) as SectionKey[]).forEach((k) => {
-    const sorted = dedupeByUrl(buckets[k]).sort(
-      (a, b) =>
-        scoreResult(b, ctx.topics, ctx.avoidEntities, ctx) -
-        scoreResult(a, ctx.topics, ctx.avoidEntities, ctx),
-    );
+    const scored = dedupeByUrl(buckets[k])
+      .map((r) => ({ r, s: scoreResult(r, ctx.topics, ctx.avoidEntities, ctx) }))
+      .sort((a, b) => b.s - a.s);
+    // "Three trustworthy results beat five weak ones": items that don't
+    // clear the quality floor are excluded from the primary platform
+    // sections entirely rather than padding the slot count. Secondary
+    // buckets (more/discovery) are unaffected — they're not quota-filled.
+    const sorted = PLATFORM_KEYS.includes(k)
+      ? scored.filter(({ s }) => s >= MIN_RESULT_SCORE).map(({ r }) => r)
+      : scored.map(({ r }) => r);
     buckets[k] = PLATFORM_KEYS.includes(k)
       ? composeSlots(sorted, SECTION_CAPS[k], ctx)
       : sorted.slice(0, SECTION_CAPS[k]);
@@ -566,6 +579,19 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
   const verifiedLinksCount = all.filter((r) => r.type !== "search_action").length;
   const searchActionsCount = all.length - verifiedLinksCount;
 
+  // Honest under-fill signal: a selected platform that came in below the
+  // 5-card target after quality filtering — surfaced in the UI as "we found
+  // N results that passed quality checks" instead of silently padding the
+  // section or leaving the shortfall unexplained.
+  const underfilled: FeedPackResult["underfilled"] = {};
+  ALL_TRAINABLE_PLATFORMS.forEach((p) => {
+    if (!selectedPlatforms.has(p)) return;
+    const shown = sections[p].length;
+    if (shown < PLATFORM_SECTION_TARGET) {
+      underfilled[p] = { shown, expected: PLATFORM_SECTION_TARGET };
+    }
+  });
+
   const muteKeywords = Array.from(
     new Set([
       ...parsed.unwanted.filter((u) => !/politic|siyaset/.test(u)),
@@ -602,6 +628,7 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
     summary,
     sections,
     platformSections,
+    underfilled,
     muteKeywords,
     trainingPlan: buildTrainingPlan(t, input.uiLang),
     metadata: {
@@ -614,45 +641,9 @@ export async function generateFeedPack(input: FeedPackInput): Promise<FeedPackRe
 }
 
 // ── URL-safe input encoding (for /results?data=…) ──────────────────────────
-
-export function encodeFeedPackInput(input: FeedPackInput): string {
-  const ascii = encodeURIComponent(JSON.stringify(input));
-  const b64 =
-    typeof window === "undefined"
-      ? Buffer.from(ascii).toString("base64")
-      : btoa(ascii);
-  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export function decodeFeedPackInput(encoded: string): FeedPackInput | null {
-  try {
-    const b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-    const ascii =
-      typeof window === "undefined"
-        ? Buffer.from(b64, "base64").toString()
-        : atob(b64);
-    const parsed = JSON.parse(decodeURIComponent(ascii)) as FeedPackInput;
-    if (typeof parsed.prompt !== "string" || !Array.isArray(parsed.pills)) {
-      return null;
-    }
-    const selectedPlatforms = Array.isArray(parsed.selectedPlatforms)
-      ? parsed.selectedPlatforms.filter((p): p is TrainablePlatform =>
-          (ALL_TRAINABLE_PLATFORMS as string[]).includes(p),
-        )
-      : [];
-    const selectedMoods = Array.isArray(parsed.selectedMoods)
-      ? parsed.selectedMoods.filter((m): m is FeedMood => (FEED_MOODS as string[]).includes(m))
-      : [];
-    return {
-      ...parsed,
-      // Same input-hygiene caps as the API route — the URL is user-editable.
-      prompt: parsed.prompt.replace(/[\u0000-\u001F\u007F]/g, " ").slice(0, 300),
-      pills: parsed.pills.filter((p): p is string => typeof p === "string").slice(0, 10),
-      uiLang: parsed.uiLang === "tr" ? "tr" : "en",
-      selectedPlatforms,
-      selectedMoods,
-    };
-  } catch {
-    return null;
-  }
-}
+// Moved to feedPackCodec.ts (isomorphic, no server-only deps) so client
+// components can import the codec without pulling in this file's
+// discovery.ts -> validateUrl.ts chain (node:dns/promises can't bundle for
+// the browser). Re-exported here so existing server-side imports
+// (api/feedpack/route.ts, results/page.tsx) keep working unchanged.
+export { encodeFeedPackInput, decodeFeedPackInput } from "@/lib/feedPackCodec";

@@ -202,6 +202,11 @@ export interface FeedPackResult {
   /** Platform-first named view of the same data: x, instagram, tiktok,
    * youtube, supportingSources, moreDiscoveryPaths. */
   platformSections: Record<string, PlatformSection>;
+  /** Selected platforms whose section came in below the 5-card target after
+   * quality filtering — the UI renders an honest "found N results" note
+   * instead of silently showing a short section or padding it with weak
+   * matches. Absent key = that platform hit the target (or wasn't selected). */
+  underfilled: Partial<Record<TrainablePlatform, { shown: number; expected: number }>>;
   muteKeywords: string[];
   trainingPlan: DayPlanItem[];
   metadata: {

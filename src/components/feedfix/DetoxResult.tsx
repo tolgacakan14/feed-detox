@@ -225,6 +225,14 @@ export function DetoxResult({ result }: { result: FeedPackResult }) {
                   ))}
                 </ul>
               ) : null}
+              {sectionPlatform && result.underfilled[sectionPlatform as TrainablePlatform] ? (
+                <p className="mt-3 pl-[calc(2rem+0.625rem)] text-xs italic text-muted-foreground/70">
+                  {t.qualityUnderfilled.replace(
+                    "{n}",
+                    String(result.underfilled[sectionPlatform as TrainablePlatform]!.shown),
+                  )}
+                </p>
+              ) : null}
               <div className={`mt-4 grid gap-4 ${isSecondary ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                 {items.map((item) => (
                   <ResultCard

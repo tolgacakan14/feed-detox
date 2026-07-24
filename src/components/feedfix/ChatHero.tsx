@@ -6,11 +6,13 @@ import { ArrowUp } from "lucide-react";
 import { QuickPills } from "@/components/feedfix/QuickPills";
 import { PlatformSelector } from "@/components/feedfix/PlatformSelector";
 import { MoodSelector } from "@/components/feedfix/MoodSelector";
-import { encodeFeedPackInput } from "@/lib/generateFeedPack";
+import { encodeFeedPackInput } from "@/lib/feedPackCodec";
 import { trackEvent } from "@/lib/analytics";
 import { translations } from "@/lib/i18n";
 import { useLang } from "@/lib/langContext";
 import type { FeedMood, TrainablePlatform } from "@/types";
+
+const ALL_PLATFORMS: TrainablePlatform[] = ["x", "instagram", "youtube", "tiktok"];
 
 export function ChatHero() {
   const router = useRouter();
@@ -18,15 +20,20 @@ export function ChatHero() {
   const [prompt, setPrompt] = useState("");
   const [pills, setPills] = useState<string[]>([]);
   // Starts EMPTY on purpose: tapping a platform SELECTS it (selectedPlatforms
-  // means "included platforms only"). Empty = no explicit choice = the engine
-  // defaults to all four. Pre-selecting all four made the first tap read as
-  // an inverted selection — tapping X deselected it and built a pack for
-  // every platform EXCEPT X.
+  // means "included platforms only"). A platform is now REQUIRED before
+  // generation — see canSubmit / handleSubmit below. Pre-selecting all four
+  // made the first tap read as an inverted selection (tapping X deselected
+  // it and built a pack for every platform EXCEPT X), so this still starts
+  // empty; the difference is generation is now blocked until the user picks.
   const [selectedPlatforms, setSelectedPlatforms] = useState<TrainablePlatform[]>([]);
   const [selectedMoods, setSelectedMoods] = useState<FeedMood[]>([]);
+  // Only shows the "select a platform" validation message after a real
+  // submit attempt — not on first paint, before the user has done anything.
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const t = translations[lang];
 
-  const canSubmit = prompt.trim().length > 0 || pills.length > 0;
+  const hasTopic = prompt.trim().length > 0 || pills.length > 0;
+  const canSubmit = hasTopic && selectedPlatforms.length > 0;
 
   function togglePlatform(platform: TrainablePlatform) {
     setSelectedPlatforms((prev) =>
@@ -40,12 +47,29 @@ export function ChatHero() {
     );
   }
 
-  function submit(overridePrompt?: string) {
+  /** `platformsOverride` lets the "Try Galatasaray" shortcut make an
+   * explicit, visible platform choice (all four) in the same click, rather
+   * than relying on async state from a prior toggle — it is never an
+   * implicit default, always a real selection passed to the engine. */
+  function submit(overridePrompt?: string, platformsOverride?: TrainablePlatform[]) {
     const finalPrompt = (overridePrompt ?? prompt).trim();
     if (!finalPrompt && pills.length === 0) return;
-    const input = { prompt: finalPrompt, pills, uiLang: lang, selectedPlatforms, selectedMoods };
+    const platforms = platformsOverride ?? selectedPlatforms;
+    if (platforms.length === 0) {
+      setAttemptedSubmit(true);
+      return;
+    }
+    const input = { prompt: finalPrompt, pills, uiLang: lang, selectedPlatforms: platforms, selectedMoods };
     trackEvent("generate_pack", input);
     router.push(`/results?data=${encodeFeedPackInput(input)}`);
+  }
+
+  function submitSample() {
+    // Explicit one-click demo: visibly selects all four platforms (so the
+    // user sees exactly what's about to be generated) instead of silently
+    // relying on an "empty means all" default.
+    setSelectedPlatforms(ALL_PLATFORMS);
+    submit("Galatasaray", ALL_PLATFORMS);
   }
 
   return (
@@ -121,7 +145,7 @@ export function ChatHero() {
               <button
                 type="button"
                 onClick={() => submit()}
-                disabled={!canSubmit}
+                disabled={!hasTopic}
                 aria-label={t.generate}
                 className="absolute bottom-3.5 right-3 flex size-9 items-center justify-center rounded-full bg-brand-gradient text-white shadow-md shadow-aqua/30 transition-all hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
               >
@@ -130,7 +154,12 @@ export function ChatHero() {
             </div>
 
             <div className="mt-4">
-              <PlatformSelector selected={selectedPlatforms} onToggle={togglePlatform} lang={lang} />
+              <PlatformSelector
+                selected={selectedPlatforms}
+                onToggle={togglePlatform}
+                lang={lang}
+                showError={attemptedSubmit}
+              />
             </div>
 
             <div className="mt-4 border-t border-border/50 pt-4">
@@ -157,13 +186,14 @@ export function ChatHero() {
             type="button"
             onClick={() => submit()}
             disabled={!canSubmit}
+            aria-describedby={attemptedSubmit && selectedPlatforms.length === 0 ? "platform-required-error" : undefined}
             className="inline-flex h-12 items-center rounded-full bg-brand-gradient px-8 text-base font-semibold text-white shadow-lg shadow-aqua/25 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-aqua/35 disabled:opacity-40 disabled:hover:translate-y-0"
           >
             {t.generate}
           </button>
           <button
             type="button"
-            onClick={() => submit("Galatasaray")}
+            onClick={submitSample}
             className="rounded-full border border-border bg-background/70 px-5 py-2.5 text-sm font-medium text-muted-foreground backdrop-blur transition-colors hover:border-aqua/60 hover:text-foreground"
           >
             {t.trySample}

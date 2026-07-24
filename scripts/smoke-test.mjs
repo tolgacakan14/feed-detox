@@ -198,6 +198,32 @@ async function main() {
   });
   check("whitespace topic rejected with 400", empty.status === 400);
 
+  console.log("quality threshold / honest under-fill:");
+  const obscure = await pack({
+    topic: `an extremely obscure microtopic ${Math.random().toString(36).slice(2)}`,
+    selectedPlatforms: ["tiktok"],
+  });
+  check(
+    "obscure topic never pads a section with weak matches to hit 5",
+    (obscure.sections.tiktok ?? []).length <= 5,
+  );
+  check(
+    "underfilled metadata is structurally present on the result",
+    obscure.underfilled !== undefined && typeof obscure.underfilled === "object",
+  );
+
+  console.log("app-store readiness routes:");
+  for (const route of ["/privacy", "/terms", "/support", "/robots.txt", "/sitemap.xml"]) {
+    const res = await fetch(`${BASE_URL}${route}`);
+    check(`${route} returns 200`, res.status === 200, `got ${res.status}`);
+  }
+  const privacyHtml = await (await fetch(`${BASE_URL}/privacy`)).text();
+  check("privacy page discloses Tavily", privacyHtml.includes("Tavily"));
+  check("privacy page discloses YouTube Data API", privacyHtml.includes("YouTube Data API"));
+  const homeHtml = await (await fetch(`${BASE_URL}/`)).text();
+  check("footer links to /privacy, /terms, /support", ["/privacy", "/terms", "/support"].every((r) => homeHtml.includes(`href="${r}"`)));
+  check("footer carries the independence/affiliation disclaimer", homeHtml.includes("not affiliated with"));
+
   console.log(`\n${failures === 0 ? "PASS" : `FAIL (${failures} check${failures > 1 ? "s" : ""})`}`);
   process.exit(failures === 0 ? 0 : 1);
 }

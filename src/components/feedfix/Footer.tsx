@@ -36,13 +36,22 @@ export function Footer() {
               <li><Link href="/#early-access" className="hover:text-foreground">{t.navEarly}</Link></li>
             </ul>
           </div>
+          <div>
+            <p className="font-medium">{t.footerLegalCol}</p>
+            <ul className="mt-3 space-y-2 text-muted-foreground">
+              <li><Link href="/privacy" className="hover:text-foreground">{t.footerPrivacy}</Link></li>
+              <li><Link href="/terms" className="hover:text-foreground">{t.footerTerms}</Link></li>
+              <li><Link href="/support" className="hover:text-foreground">{t.footerSupport}</Link></li>
+            </ul>
+          </div>
         </div>
       </div>
 
       <div className="border-t border-border/60 py-4">
-        <p className="mx-auto max-w-6xl px-4 text-xs text-muted-foreground sm:px-6">
-          {t.footerLegal.replace("{y}", String(new Date().getFullYear()))}
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 text-xs text-muted-foreground sm:px-6">
+          <p>{t.footerLegal.replace("{y}", String(new Date().getFullYear()))}</p>
+          <p className="text-muted-foreground/70">{t.footerDisclaimer}</p>
+        </div>
       </div>
     </footer>
   );

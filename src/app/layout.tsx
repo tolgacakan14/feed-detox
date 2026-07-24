@@ -20,10 +20,34 @@ const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
 });
 
+const SITE_URL = "https://feed-detox.vercel.app";
+const TITLE = "Feed Detox — Educate your feed. Train your timeline.";
+const DESCRIPTION =
+  "Type what you want to see online. Feed Detox gives you the creators, links, communities, searches and mute keywords to train your social media algorithm.";
+
 export const metadata: Metadata = {
-  title: "Feed Detox — Educate your feed. Train your timeline.",
-  description:
-    "Type what you want to see online. Feed Detox gives you the creators, links, communities, searches and mute keywords to train your social media algorithm.",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Feed Detox",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+};
+
+export const viewport = {
+  themeColor: "#12afc2",
 };
 
 export default function RootLayout({

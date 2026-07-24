@@ -10,6 +10,7 @@ export const samplePacks: SamplePack[] = [
       prompt: "Galatasaray, football analysis, less transfer drama",
       pills: ["Galatasaray", "Football", "Turkish"],
       uiLang: "tr",
+      selectedPlatforms: ["x", "instagram", "youtube", "tiktok"],
     },
   },
   {
@@ -21,6 +22,7 @@ export const samplePacks: SamplePack[] = [
       prompt: "AI tools, career advice, productivity, less politics and drama",
       pills: ["AI Tools", "Career", "English"],
       uiLang: "en",
+      selectedPlatforms: ["x", "instagram", "youtube", "tiktok"],
     },
   },
   {
@@ -32,6 +34,7 @@ export const samplePacks: SamplePack[] = [
       prompt: "good news, nature, slow living, no politics, no outrage",
       pills: ["No Politics", "Global"],
       uiLang: "en",
+      selectedPlatforms: ["x", "instagram", "youtube", "tiktok"],
     },
   },
   {
@@ -43,6 +46,7 @@ export const samplePacks: SamplePack[] = [
       prompt: "indie music, music production, underground artists, less mainstream hype",
       pills: ["Music", "Niche Creators"],
       uiLang: "en",
+      selectedPlatforms: ["x", "instagram", "youtube", "tiktok"],
     },
   },
   {
@@ -54,6 +58,7 @@ export const samplePacks: SamplePack[] = [
       prompt: "streetwear, fashion, outfit ideas, less haul spam",
       pills: ["Fashion", "Global"],
       uiLang: "en",
+      selectedPlatforms: ["x", "instagram", "youtube", "tiktok"],
     },
   },
 ];

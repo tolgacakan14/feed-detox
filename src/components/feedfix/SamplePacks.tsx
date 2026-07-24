@@ -11,10 +11,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { samplePacks } from "@/data/samplePacks";
-import { encodeFeedPackInput } from "@/lib/generateFeedPack";
+import { encodeFeedPackInput } from "@/lib/feedPackCodec";
 import { Badge } from "@/components/ui/badge";
 import { useLang } from "@/lib/langContext";
 import { translations } from "@/lib/i18n";
+import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
 
 const PACK_ICON: Record<string, LucideIcon> = {
   galatasaray: Trophy,
@@ -44,6 +45,20 @@ export function SamplePacks({ limit }: { limit?: number }) {
           </span>
           <h3 className="font-heading text-base font-semibold">{pack.title}</h3>
           <p className="text-sm text-muted-foreground">{pack.description}</p>
+          {/* Platforms this pack generates for — visible before opening, so
+           * nothing renders that wasn't disclosed on the card. */}
+          {pack.input.selectedPlatforms && pack.input.selectedPlatforms.length > 0 ? (
+            <div className="flex items-center gap-1.5" aria-label="Platforms">
+              {pack.input.selectedPlatforms.map((p) => (
+                <span
+                  key={p}
+                  className="flex size-6 items-center justify-center rounded-full bg-foreground/[0.06]"
+                >
+                  <PlatformIcon platform={p} className="size-3.5" branded />
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-1.5">
             {pack.input.pills.map((pill) => (
               <Badge key={pill} variant="secondary" className="text-xs">

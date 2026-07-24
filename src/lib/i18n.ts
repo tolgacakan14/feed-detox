@@ -21,7 +21,9 @@ export interface Dict {
   noConnect: string; // "we don't connect to your accounts" line
   // Platform selection (directly under the topic input)
   platformSelectorLabel: string;
-  platformAllHint: string; // shown when nothing is selected (= all four)
+  /** Inline validation message shown when the user tries to generate a
+   * pack with zero platforms selected — a platform is now required. */
+  platformRequiredError: string;
   // Mood selector (mood labels themselves stay English via MOOD_LABELS)
   moodSelectorLabel: string;
   moodHelper: string;
@@ -34,6 +36,9 @@ export interface Dict {
   // Result
   resultTitle: string;
   directFallbackNote: string;
+  /** "{n}" placeholder — shown under a section that came in below the
+   * 5-card target because weaker matches were excluded, not hidden. */
+  qualityUnderfilled: string;
   sections: Record<SectionKey, { name: string; purpose: string }>;
   openLabel: string; // footer "Open" button — same for every card, every section
   muteTitle: string;
@@ -54,6 +59,11 @@ export interface Dict {
   footerProductCol: string;
   footerMoreCol: string;
   footerLegal: string; // "{y}" placeholder for the year
+  footerLegalCol: string;
+  footerPrivacy: string;
+  footerTerms: string;
+  footerSupport: string;
+  footerDisclaimer: string;
   // Homepage sections
   packsEyebrow: string;
   packsTitle: string;
@@ -84,7 +94,7 @@ export const translations: Record<UiLang, Dict> = {
     noConnect:
       "We don’t connect to your accounts. You stay in control — Feed Detox just gives you better signals to open.",
     platformSelectorLabel: "Choose the platforms you want to train.",
-    platformAllHint: "(none selected = all four)",
+    platformRequiredError: "Select at least one platform.",
     moodSelectorLabel: "Choose your feed mood",
     moodHelper: "Shape the emotional direction of your recommendations.",
     platformActions: {
@@ -125,6 +135,8 @@ export const translations: Record<UiLang, Dict> = {
     resultTitle: "Your Feed Pack is ready.",
     directFallbackNote:
       "Feed Detox prioritizes direct accounts, creators and content on each platform — a Search fallback appears at the bottom only when a selected platform has no direct results.",
+    qualityUnderfilled:
+      "We found {n} results that passed our quality checks. We left out weaker matches.",
     sections: {
       x: { name: "X / Twitter", purpose: "Clean your timeline with better accounts and threads." },
       instagram: { name: "Instagram", purpose: "Tune Reels and Explore with stronger creators." },
@@ -149,8 +161,14 @@ export const translations: Record<UiLang, Dict> = {
       "Feed Detox gives you better creators, content, communities and signals to train your feed — manually, on your terms.",
     footerProductCol: "Product",
     footerMoreCol: "More",
+    footerLegalCol: "Legal",
+    footerPrivacy: "Privacy",
+    footerTerms: "Terms",
+    footerSupport: "Support",
     footerLegal:
       "© {y} Feed Detox. We never connect to, access, or modify your social media accounts — every link opens the real platform in your own browser.",
+    footerDisclaimer:
+      "Feed Detox is an independent product and is not affiliated with X, Instagram, TikTok, YouTube or their parent companies.",
     packsEyebrow: "Sample Packs",
     packsTitle: "Start from a ready-made pack",
     packsSeeAll: "See all sample packs →",
@@ -175,7 +193,7 @@ export const translations: Record<UiLang, Dict> = {
     noConnect:
       "Hesaplarına bağlanmıyoruz. Kontrol sende — Feed Detox sana sadece açman için daha iyi signal’lar verir.",
     platformSelectorLabel: "Eğitmek istediğin platformları seç.",
-    platformAllHint: "(seçim yoksa dördü de dahil)",
+    platformRequiredError: "En az bir platform seç.",
     moodSelectorLabel: "Feed mood’unu seç",
     moodHelper: "Önerilerin nasıl hissettirmesini istediğini seç.",
     platformActions: {
@@ -216,6 +234,8 @@ export const translations: Record<UiLang, Dict> = {
     resultTitle: "Feed Pack’in hazır.",
     directFallbackNote:
       "Feed Detox her platformda önce direct account ve creator önerir — Search fallback sadece seçili bir platformda hiç direct sonuç yoksa en altta görünür.",
+    qualityUnderfilled:
+      "Kalite kontrollerimizi geçen {n} sonuç bulduk. Daha zayıf eşleşmeleri listeye eklemedik.",
     sections: {
       x: { name: "X / Twitter", purpose: "Daha iyi account ve thread’lerle timeline’ını temizle." },
       instagram: { name: "Instagram", purpose: "Daha güçlü creator’larla Reels ve Explore’unu iyileştir." },
@@ -240,8 +260,14 @@ export const translations: Record<UiLang, Dict> = {
       "Feed Detox, feed’ini eğitmek için daha iyi creator, content, community ve signal’lar verir — manuel olarak, kontrol sende.",
     footerProductCol: "Ürün",
     footerMoreCol: "Daha fazlası",
+    footerLegalCol: "Legal",
+    footerPrivacy: "Gizlilik",
+    footerTerms: "Kullanım Koşulları",
+    footerSupport: "Destek",
     footerLegal:
       "© {y} Feed Detox. Sosyal medya hesaplarına bağlanmayız, erişmeyiz veya değişiklik yapmayız — her link gerçek platformu kendi tarayıcında açar.",
+    footerDisclaimer:
+      "Feed Detox bağımsız bir üründür ve X, Instagram, TikTok, YouTube veya bu şirketlerin ana şirketleriyle affiliate değildir.",
     packsEyebrow: "Sample Packs",
     packsTitle: "Hazır bir pack ile başla",
     packsSeeAll: "Tüm sample pack’leri gör →",

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { PlatformIcon } from "@/components/feedfix/PlatformIcon";
 import { PLATFORM_LABELS } from "@/lib/platform";
-import { encodeFeedPackInput } from "@/lib/generateFeedPack";
+import { encodeFeedPackInput } from "@/lib/feedPackCodec";
 import { translations } from "@/lib/i18n";
 import type { FeedPackInput, TrainablePlatform } from "@/types";
 
